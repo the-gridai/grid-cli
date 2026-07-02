@@ -1,0 +1,72 @@
+# Dependencies
+node_modules/
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+combined.log
+error.log
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Sensitive keys - NEVER commit these
+ed25519.key
+ed25519_pub.der
+*.key
+*.pem
+*.der
+
+# Database
+*.db
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+
+# Transient test-helper directories (config-restart-survival.test.ts writes
+# a bundle under the repo root during the test and cleans up afterwards;
+# interrupted runs may leave them behind).
+.config-restart-helper-*/
+
+# Local sandbox (strategy.json + SQLite) used for hand-testing the daemon.
+dev/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+coverage/
+.nyc_output/
+
+# Build output
+build/
+out/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+output.txt
+output.log
+markets.log
+
+# SQLite temporary files
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+
+# Benchmark run artifacts (generated per-run, not tracked)
+benchmarks/exchange/runs/
+
+# Local env files
+.env.marketmaker
+.env.supplier
+*.mjs
+# Local multi-strategy testing
+.env.multi-test

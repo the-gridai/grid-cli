@@ -1,0 +1,21 @@
+# Grid Mock Server CI - Router
+# This workflow triggers the mock server CI on changes to the mock server
+
+name: Grid Mock Server CI
+
+on:
+  push:
+    branches: [main, dev, demo]
+    paths:
+      - 'grid/mock-server/**'
+      - '.github/workflows/grid-mock-server-ci.yml'
+      - '.github/workflows/grid-mock-server-ci-impl.yml'
+  pull_request:
+    paths:
+      - 'grid/mock-server/**'
+      - '.github/workflows/grid-mock-server-ci.yml'
+      - '.github/workflows/grid-mock-server-ci-impl.yml'
+
+jobs:
+  ci:
+    uses: ./.github/workflows/grid-mock-server-ci-impl.yml

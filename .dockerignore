@@ -1,0 +1,68 @@
+# =============================================================================
+# Docker Ignore - Grid CLI
+# =============================================================================
+
+# Dependencies (will be installed fresh in container)
+node_modules/
+
+# Build output (will be rebuilt in container)
+dist/
+
+# Development files
+.git/
+.gitignore
+.github/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Test files
+tests/
+*.test.ts
+*.spec.ts
+jest.config.js
+coverage/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Local configuration and secrets
+.env
+.env.*
+*.local
+*.config.json
+
+# Logs and temporary files
+logs/
+*.log
+combined.log
+error.log
+tmp/
+temp/
+
+# Key files (should never be in container)
+*.pem
+*.key
+*.der
+ed25519_pub.der
+
+# Scripts not needed in production
+scripts/*
+!scripts/postbuild.cjs
+
+# Development tools
+eslint.config.js
+# Note: tsconfig.json is needed for build
+
+# Helm charts (separate deployment artifact)
+chart/
+
+# CI/CD
+.github/
+Makefile

@@ -1,0 +1,198 @@
+# =============================================================================
+# Grid Release Workflow
+# =============================================================================
+#
+# Builds standalone CLI binaries for all supported platforms and creates
+# a GitHub Release with the binaries attached.
+#
+# =============================================================================
+# RELEASE PROCESS
+# =============================================================================
+#
+# For MAJOR changes, use Release Candidates (RC) first:
+#
+#   1. Create RC release:
+#        git tag v0.12.0-rc.1
+#        git push origin v0.12.0-rc.1
+#
+#   2. Test the RC binaries thoroughly
+#
+#   3. If issues found, fix and create another RC:
+#        git tag v0.12.0-rc.2
+#        git push origin v0.12.0-rc.2
+#
+#   4. When ready, create the final release:
+#        - Update package.json version to 0.12.0
+#        - Update CHANGELOG.md (move RC notes to final version)
+#        - Commit: git commit -am "chore: Release v0.12.0"
+#        - Tag: git tag v0.12.0 && git push origin v0.12.0
+#
+# For MINOR/PATCH changes (low risk):
+#
+#   1. Update version in package.json
+#   2. Update CHANGELOG.md with release notes
+#   3. Commit changes: git commit -am "chore: Release v0.11.1"
+#   4. Create and push tag:
+#        git tag v0.11.1
+#        git push origin v0.11.1
+#
+# =============================================================================
+# TAG FORMAT & VERSIONING
+# =============================================================================
+#
+# Release tags must match: v*
+#
+# Examples:
+#   v0.11.0        → Full release (prerelease: false)
+#   v0.11.1        → Patch release (prerelease: false)
+#   v0.12.0-rc.1   → Release candidate (prerelease: true)
+#   v0.12.0-rc.2   → Release candidate (prerelease: true)
+#   v0.12.0-beta.1 → Beta release (prerelease: true)
+#   v0.12.0-alpha.1→ Alpha release (prerelease: true)
+#
+# Prerelease detection: Any tag containing -rc., -beta., or -alpha.
+#
+# =============================================================================
+# PLATFORMS & LIMITATIONS
+# =============================================================================
+#
+# This workflow builds binaries for:
+#   - linux-amd64   (x86_64 Linux, glibc)
+#   - linux-arm64   (ARM64 Linux, glibc)
+#   - darwin-amd64  (Intel Mac)
+#   - darwin-arm64  (Apple Silicon Mac)
+#   - windows-amd64 (Windows x64) - may fail due to pkg limitations
+#
+# IMPORTANT: The pkg tool has limited ESM support. Binaries may not work
+# correctly for this ESM project due to dependencies (ink, react) that use
+# top-level await. If binaries fail, use npm install instead:
+#
+#   npm install -g git+ssh://git@github.com:the-gridai/grid-cli.git
+#
+# Alpine/musl Linux is NOT supported - binaries require glibc.
+#
+# =============================================================================
+
+name: Grid Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-amd64
+            pkg_target: node20-linux-x64
+          - os: ubuntu-latest
+            platform: linux-arm64
+            pkg_target: node20-linux-arm64
+          - os: macos-latest
+            platform: darwin-amd64
+            pkg_target: node20-macos-x64
+          - os: macos-latest
+            platform: darwin-arm64
+            pkg_target: node20-macos-arm64
+          - os: windows-latest
+            platform: windows-amd64
+            pkg_target: node20-win-x64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build CLI
+        run: npm run build:ci
+
+      - name: Package binary (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          mkdir -p dist/binaries
+          npx @yao-pkg/pkg . --target ${{ matrix.pkg_target }} --output dist/binaries/grid-${{ matrix.platform }}
+          ls -la dist/binaries/
+
+      - name: Package binary (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          mkdir -p dist/binaries
+          npx @yao-pkg/pkg . --target ${{ matrix.pkg_target }} --output dist/binaries/grid-${{ matrix.platform }}.exe
+          dir dist\binaries\
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: grid-${{ matrix.platform }}
+          path: dist/binaries/grid-*
+          retention-days: 1
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    # Run even if some builds failed (e.g., Windows), but not if cancelled
+    if: always() && !cancelled()
+    timeout-minutes: 10
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: binaries
+          merge-multiple: true
+
+      - name: List binaries
+        run: |
+          echo "Downloaded binaries:"
+          find binaries -type f -ls || ls -laR binaries/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Grid CLI ${{ github.ref_name }}
+          draft: false
+          # Prerelease if tag contains -rc., -beta., or -alpha.
+          prerelease: ${{ contains(github.ref_name, '-rc.') || contains(github.ref_name, '-beta.') || contains(github.ref_name, '-alpha.') }}
+          files: binaries/*
+          body: |
+            ## Grid CLI ${{ github.ref_name }}
+            
+            ### Quick Install
+            
+            Download the binary for your platform from the assets below, then:
+            
+            ```bash
+            chmod +x grid-*  # Make executable (Unix only)
+            ./grid-linux-amd64 --help  # Test it works
+            sudo mv grid-linux-amd64 /usr/local/bin/grid  # Install globally
+            ```
+            
+            ### Changelog
+            
+            See [CHANGELOG.md](https://github.com/the-gridai/grid-cli/blob/main/CHANGELOG.md) for details.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
