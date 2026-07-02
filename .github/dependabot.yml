@@ -1,0 +1,55 @@
+# Dependabot configuration for automated dependency updates
+
+version: 2
+updates:
+  # Grid SDK TypeScript
+  - package-ecosystem: "npm"
+    directory: "/grid/packages/sdk-typescript"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "deps(grid-sdk)"
+    labels:
+      - "dependencies"
+      - "grid"
+    open-pull-requests-limit: 5
+
+  # Grid Mock Server
+  - package-ecosystem: "npm"
+    directory: "/grid/mock-server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "deps(mock-server)"
+    labels:
+      - "dependencies"
+      - "grid"
+    open-pull-requests-limit: 5
+
+  # Root project (CLI + SDK)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+    commit-message:
+      prefix: "deps(root)"
+    labels:
+      - "dependencies"
+      - "root"
+    open-pull-requests-limit: 5
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+    commit-message:
+      prefix: "deps(actions)"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    open-pull-requests-limit: 3

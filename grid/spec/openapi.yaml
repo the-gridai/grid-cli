@@ -1,0 +1,1331 @@
+openapi: 3.1.0
+info:
+  title: Grid Trading API
+  description: |
+    The Grid Trading API provides programmatic access to the Grid trading platform
+    for AI compute commodities.
+
+    ## Authentication
+
+    All authenticated endpoints require Ed25519 signature authentication:
+
+    - `x-thegrid-signature`: Ed25519 signature of the request
+    - `x-thegrid-timestamp`: Unix timestamp (seconds)
+    - `x-thegrid-fingerprint`: SHA256 hash of your public key (base64, no padding)
+
+    The signature message format is: `{timestamp}{METHOD}{path}{body}`
+
+    ## Rate Limits
+
+    - 100 requests per minute per signing key
+    - WebSocket: 10 subscriptions per connection
+  version: 0.1.0
+  contact:
+    name: The Grid
+    url: https://thegrid.ai
+    email: support@thegrid.ai
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.thegrid.ai
+    description: Production API
+  - url: https://api.dev.thegrid.ai
+    description: Development API
+  - url: http://localhost:3000
+    description: Local Mock Server
+
+tags:
+  - name: Orders
+    description: Order management
+  - name: Markets
+    description: Market data and information
+  - name: Trades
+    description: Trade history
+  - name: Accounts
+    description: Account balances and management
+  - name: Supply
+    description: Supply issuance (for suppliers)
+  - name: Transfers
+    description: Balance transfers
+
+paths:
+  /trading/orders:
+    get:
+      tags:
+        - Orders
+      summary: List orders
+      description: Get a list of orders with optional filtering
+      operationId: listOrders
+      security:
+        - signatureAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FilterStatus'
+        - $ref: '#/components/parameters/FilterMarketId'
+        - $ref: '#/components/parameters/FilterSide'
+      responses:
+        '200':
+          description: List of orders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+    post:
+      tags:
+        - Orders
+      summary: Place order
+      description: Place a new order
+      operationId: createOrder
+      security:
+        - signatureAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaceOrderRequest'
+      responses:
+        '201':
+          description: Order placed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateOrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/InsufficientBalance'
+
+  /trading/orders/{orderId}:
+    get:
+      tags:
+        - Orders
+      summary: Get order
+      description: Get order details by ID
+      operationId: getOrder
+      security:
+        - signatureAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/OrderNotFound'
+
+    put:
+      tags:
+        - Orders
+      summary: Update order
+      description: Update an existing order
+      operationId: updateOrder
+      security:
+        - signatureAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrderRequest'
+      responses:
+        '200':
+          description: Order updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/OrderNotFound'
+
+    delete:
+      tags:
+        - Orders
+      summary: Cancel order
+      description: Cancel an existing order
+      operationId: cancelOrder
+      security:
+        - signatureAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '204':
+          description: Order cancelled successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/OrderNotFound'
+
+  /trading/markets:
+    get:
+      tags:
+        - Markets
+      summary: List markets
+      description: Get all available markets
+      operationId: listMarkets
+      security:
+        - signatureAuth: []
+      responses:
+        '200':
+          description: List of markets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketListResponse'
+
+  /trading/markets/{marketId}:
+    get:
+      tags:
+        - Markets
+      summary: Get market
+      description: Get market details by ID
+      operationId: getMarket
+      security:
+        - signatureAuth: []
+      parameters:
+        - $ref: '#/components/parameters/MarketId'
+      responses:
+        '200':
+          description: Market details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketResponse'
+        '404':
+          $ref: '#/components/responses/MarketNotFound'
+
+  /trading/markets/{marketId}/ticker:
+    get:
+      tags:
+        - Markets
+      summary: Get ticker
+      description: Get current ticker for a market
+      operationId: getTicker
+      security:
+        - signatureAuth: []
+      parameters:
+        - $ref: '#/components/parameters/MarketId'
+      responses:
+        '200':
+          description: Ticker data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TickerResponse'
+        '404':
+          $ref: '#/components/responses/MarketNotFound'
+
+  /trading/markets/{marketId}/orderbook:
+    get:
+      tags:
+        - Markets
+      summary: Get order book
+      description: Get order book for a market
+      operationId: getOrderBook
+      security:
+        - signatureAuth: []
+      parameters:
+        - $ref: '#/components/parameters/MarketId'
+        - name: depth
+          in: query
+          description: Number of levels to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Order book data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderBookResponse'
+        '404':
+          $ref: '#/components/responses/MarketNotFound'
+
+  /trading/markets/{marketId}/trades:
+    get:
+      tags:
+        - Markets
+      summary: Get market trades
+      description: Get recent public trades for a market
+      operationId: getMarketTrades
+      security:
+        - signatureAuth: []
+      parameters:
+        - $ref: '#/components/parameters/MarketId'
+        - name: limit
+          in: query
+          description: Maximum number of trades to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Recent trades
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicTradeListResponse'
+
+  /trading/trades:
+    get:
+      tags:
+        - Trades
+      summary: List user trades
+      description: Get user's trade history
+      operationId: listTrades
+      security:
+        - signatureAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FilterMarketId'
+        - $ref: '#/components/parameters/FilterFromDate'
+        - $ref: '#/components/parameters/FilterToDate'
+      responses:
+        '200':
+          description: List of trades
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradeListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /trading/trades/{tradeId}:
+    get:
+      tags:
+        - Trades
+      summary: Get trade
+      description: Get trade details by ID
+      operationId: getTrade
+      security:
+        - signatureAuth: []
+      parameters:
+        - name: tradeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Trade details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradeResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /trading/trading-accounts:
+    get:
+      tags:
+        - Accounts
+      summary: Get trading accounts
+      description: Get user's trading account balances
+      operationId: getTradingAccounts
+      security:
+        - signatureAuth: []
+      responses:
+        '200':
+          description: Trading account balances
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradingAccountListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /trading/consumption-accounts:
+    get:
+      tags:
+        - Accounts
+      summary: Get consumption accounts
+      description: Get user's consumption account balances (inference credits)
+      operationId: getConsumptionAccounts
+      security:
+        - signatureAuth: []
+      responses:
+        '200':
+          description: Consumption account balances
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsumptionAccountListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /trading/issuance-accounts:
+    get:
+      tags:
+        - Accounts
+      summary: Get issuance accounts
+      description: Get supplier's issuance account balances
+      operationId: getIssuanceAccounts
+      security:
+        - signatureAuth: []
+      responses:
+        '200':
+          description: Issuance account balances
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuanceAccountListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /trading/supply-issuances:
+    get:
+      tags:
+        - Supply
+      summary: List supply issuances
+      description: Get list of supply issuances
+      operationId: listSupplyIssuances
+      security:
+        - signatureAuth: []
+      responses:
+        '200':
+          description: List of supply issuances
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplyIssuanceListResponse'
+
+    post:
+      tags:
+        - Supply
+      summary: Create supply issuance
+      description: Issue new supply (suppliers only)
+      operationId: createSupplyIssuance
+      security:
+        - signatureAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSupplyIssuanceRequest'
+      responses:
+        '201':
+          description: Supply issued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplyIssuanceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /trading/transfers/trading-to-consumption:
+    post:
+      tags:
+        - Transfers
+      summary: Transfer to consumption
+      description: Transfer balance from trading to consumption account
+      operationId: transferToConsumption
+      security:
+        - signatureAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+      responses:
+        '200':
+          description: Transfer successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/InsufficientBalance'
+
+  /trading/transfers/consumption-to-trading:
+    post:
+      tags:
+        - Transfers
+      summary: Transfer to trading
+      description: Transfer balance from consumption to trading account
+      operationId: transferToTrading
+      security:
+        - signatureAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+      responses:
+        '200':
+          description: Transfer successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/InsufficientBalance'
+
+  /trading/me:
+    get:
+      tags:
+        - Accounts
+      summary: Get current user
+      description: Get information about the authenticated user
+      operationId: getCurrentUser
+      security:
+        - signatureAuth: []
+      responses:
+        '200':
+          description: User information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    signatureAuth:
+      type: apiKey
+      in: header
+      name: x-thegrid-signature
+      description: |
+        Ed25519 signature authentication. Requires three headers:
+        - x-thegrid-signature: Ed25519 signature
+        - x-thegrid-timestamp: Unix timestamp (seconds)
+        - x-thegrid-fingerprint: SHA256 hash of public key
+
+  parameters:
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      description: Order ID
+      schema:
+        type: string
+
+    MarketId:
+      name: marketId
+      in: path
+      required: true
+      description: Market ID
+      schema:
+        type: string
+
+    FilterStatus:
+      name: filters[0][field]
+      in: query
+      schema:
+        type: string
+        enum: [status]
+      description: Filter field name
+
+    FilterMarketId:
+      name: filters[1][field]
+      in: query
+      schema:
+        type: string
+        enum: [market_id]
+
+    FilterSide:
+      name: filters[2][field]
+      in: query
+      schema:
+        type: string
+        enum: [side]
+
+    FilterFromDate:
+      name: filters[0][field]
+      in: query
+      schema:
+        type: string
+        enum: [from_date]
+
+    FilterToDate:
+      name: filters[1][field]
+      in: query
+      schema:
+        type: string
+        enum: [to_date]
+
+  schemas:
+    # Request/Response wrappers
+    ApiResponse:
+      type: object
+      properties:
+        data:
+          type: object
+        error:
+          $ref: '#/components/schemas/ApiError'
+        meta:
+          $ref: '#/components/schemas/ApiMeta'
+
+    ApiError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+    ApiMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_count:
+          type: integer
+        total_pages:
+          type: integer
+
+    # Order types
+    Order:
+      type: object
+      required:
+        - id
+        - market_id
+        - side
+        - type
+        - status
+        - filled_quantity
+        - time_in_force
+      properties:
+        id:
+          type: string
+          description: Order ID
+        order_id:
+          type: string
+          description: Order ID (alias)
+        market_id:
+          type: string
+          description: Market ID
+        market_name:
+          type: string
+          nullable: true
+        instrument_id:
+          type: string
+        instrument_symbol:
+          type: string
+          nullable: true
+        side:
+          $ref: '#/components/schemas/OrderSide'
+        type:
+          $ref: '#/components/schemas/OrderType'
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        quantity:
+          type: string
+          description: Order quantity
+        filled_quantity:
+          type: number
+          description: Filled quantity
+        price:
+          type: string
+          nullable: true
+          description: Limit price
+        average_price:
+          type: string
+          nullable: true
+        stop_price:
+          type: string
+          nullable: true
+        fee:
+          type: string
+        time_in_force:
+          $ref: '#/components/schemas/TimeInForce'
+        client_order_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    OrderSide:
+      type: string
+      enum: [buy, sell]
+
+    OrderType:
+      type: string
+      enum: [limit, market, stop, stop_limit]
+
+    OrderStatus:
+      type: string
+      enum: [open, filled, cancelled, partially_filled, pending, rejected, expired, active]
+
+    TimeInForce:
+      type: string
+      enum: [gtc, ioc, fok, day]
+
+    PlaceOrderRequest:
+      type: object
+      required:
+        - market_id
+        - side
+        - type
+        - quantity
+      properties:
+        market_id:
+          type: string
+        side:
+          $ref: '#/components/schemas/OrderSide'
+        type:
+          $ref: '#/components/schemas/OrderType'
+        quantity:
+          type: string
+        price:
+          type: string
+        stop_price:
+          type: string
+        time_in_force:
+          $ref: '#/components/schemas/TimeInForce'
+        client_order_id:
+          type: string
+        post_only:
+          type: boolean
+        reduce_only:
+          type: boolean
+
+    UpdateOrderRequest:
+      type: object
+      properties:
+        price:
+          type: string
+        quantity:
+          type: string
+        stop_price:
+          type: string
+        time_in_force:
+          $ref: '#/components/schemas/TimeInForce'
+
+    OrderListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+
+    OrderResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Order'
+
+    CreateOrderResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            order_id:
+              type: string
+            client_order_id:
+              type: string
+
+    # Market types
+    Market:
+      type: object
+      required:
+        - market_id
+        - name
+        - status
+        - created_at
+        - updated_at
+      properties:
+        market_id:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        market_type:
+          type: string
+        status:
+          type: string
+        allowed_instruments:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    MarketListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Market'
+
+    MarketResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Market'
+
+    Ticker:
+      type: object
+      required:
+        - last_price
+        - highest_bid
+        - lowest_ask
+        - volume_24h
+      properties:
+        market_id:
+          type: string
+        symbol:
+          type: string
+        last_price:
+          type: string
+        last_trade_size:
+          type: string
+        last_trade_timestamp:
+          type: string
+          format: date-time
+        highest_bid:
+          type: string
+        lowest_ask:
+          type: string
+        bid:
+          type: string
+        ask:
+          type: string
+        volume_24h:
+          type: string
+        high_24h:
+          type: string
+        low_24h:
+          type: string
+        price_change_24h:
+          type: string
+        price_change_percent_24h:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    TickerResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Ticker'
+
+    OrderBookLevel:
+      type: object
+      required:
+        - price
+        - quantity
+      properties:
+        price:
+          type: string
+        quantity:
+          type: string
+        order_count:
+          type: integer
+
+    OrderBook:
+      type: object
+      required:
+        - market_id
+        - bids
+        - asks
+        - timestamp
+      properties:
+        market_id:
+          type: string
+        symbol:
+          type: string
+        bids:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderBookLevel'
+        asks:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderBookLevel'
+        timestamp:
+          type: string
+          format: date-time
+        sequence:
+          type: integer
+
+    OrderBookResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/OrderBook'
+
+    PublicTrade:
+      type: object
+      required:
+        - trade_id
+        - market_id
+        - price
+        - quantity
+        - side
+        - execution_timestamp
+      properties:
+        trade_id:
+          type: string
+        id:
+          type: string
+        market_id:
+          type: string
+        price:
+          type: string
+        quantity:
+          type: string
+        side:
+          $ref: '#/components/schemas/OrderSide'
+        execution_timestamp:
+          type: string
+          format: date-time
+
+    PublicTradeListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicTrade'
+
+    # Trade types
+    Trade:
+      type: object
+      required:
+        - id
+        - trade_id
+        - market_id
+        - price
+        - quantity
+        - total_value
+        - fee
+        - side
+        - execution_timestamp
+      properties:
+        id:
+          type: string
+        trade_id:
+          type: string
+        market_id:
+          type: string
+        market_name:
+          type: string
+          nullable: true
+        instrument_id:
+          type: string
+        price:
+          type: string
+        quantity:
+          type: string
+        total_value:
+          type: string
+        fee:
+          type: string
+        side:
+          $ref: '#/components/schemas/OrderSide'
+        execution_timestamp:
+          type: string
+          format: date-time
+        settlement_timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        order_id:
+          type: string
+          nullable: true
+
+    TradeListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Trade'
+
+    TradeResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Trade'
+
+    # Account types
+    TradingAccount:
+      type: object
+      required:
+        - account_id
+        - instrument_id
+        - total_balance
+        - available_balance
+        - updated_at
+      properties:
+        account_id:
+          type: string
+        id:
+          type: string
+        user_id:
+          type: string
+        instrument_id:
+          type: string
+        instrument_symbol:
+          type: string
+        instrument_name:
+          type: string
+        total_balance:
+          type: string
+        available_balance:
+          type: string
+        reserved_balance:
+          type: string
+        locked_balance:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TradingAccountListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TradingAccount'
+
+    ConsumptionAccount:
+      type: object
+      required:
+        - account_id
+        - user_id
+        - instrument_id
+        - status
+        - available_balance
+        - committed_balance
+        - total_balance
+      properties:
+        account_id:
+          type: string
+        user_id:
+          type: string
+        instrument_id:
+          type: string
+        status:
+          type: string
+        available_balance:
+          type: number
+        committed_balance:
+          type: number
+        total_balance:
+          type: number
+        total_deposits:
+          type: number
+        total_withdrawals:
+          type: number
+        total_commitments:
+          type: number
+        total_transfers_in:
+          type: number
+        total_transfers_out:
+          type: number
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ConsumptionAccountListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsumptionAccount'
+
+    IssuanceAccount:
+      type: object
+      required:
+        - account_id
+        - instrument_id
+        - instrument_symbol
+        - total_issued
+        - total_transferred
+        - available_balance
+        - updated_at
+      properties:
+        account_id:
+          type: string
+        id:
+          type: string
+        instrument_id:
+          type: string
+        instrument_symbol:
+          type: string
+        total_issued:
+          type: string
+        total_transferred:
+          type: string
+        available_balance:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+
+    IssuanceAccountListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/IssuanceAccount'
+
+    # Supply types
+    SupplyIssuance:
+      type: object
+      properties:
+        id:
+          type: string
+        instrument_id:
+          type: string
+        quantity:
+          type: number
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    SupplyIssuanceListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupplyIssuance'
+
+    SupplyIssuanceResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/SupplyIssuance'
+
+    CreateSupplyIssuanceRequest:
+      type: object
+      required:
+        - instrument_id
+        - quantity
+      properties:
+        instrument_id:
+          type: string
+        quantity:
+          type: number
+          minimum: 1
+
+    # Transfer types
+    TransferRequest:
+      type: object
+      required:
+        - instrument_id
+        - quantity
+      properties:
+        instrument_id:
+          type: string
+        quantity:
+          type: number
+          minimum: 1
+
+    TransferResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            status:
+              type: string
+            quantity:
+              type: number
+
+    # User types
+    User:
+      type: object
+      required:
+        - user_id
+        - email
+      properties:
+        user_id:
+          type: string
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        email_verified:
+          type: boolean
+        accepted_terms:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    UserResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/User'
+
+  responses:
+    BadRequest:
+      description: Bad request - validation error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: '#/components/schemas/ApiError'
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Invalid request parameters
+              details:
+                field: price
+                message: Price must be a positive number
+
+    Unauthorized:
+      description: Authentication failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: '#/components/schemas/ApiError'
+          example:
+            error:
+              code: AUTH_FAILED
+              message: Invalid signature
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: '#/components/schemas/ApiError'
+          example:
+            error:
+              code: NOT_FOUND
+              message: Resource not found
+
+    OrderNotFound:
+      description: Order not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: '#/components/schemas/ApiError'
+          example:
+            error:
+              code: ORDER_NOT_FOUND
+              message: Order not found
+
+    MarketNotFound:
+      description: Market not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: '#/components/schemas/ApiError'
+          example:
+            error:
+              code: MARKET_NOT_FOUND
+              message: Market not found
+
+    InsufficientBalance:
+      description: Insufficient balance
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: '#/components/schemas/ApiError'
+          example:
+            error:
+              code: INSUFFICIENT_BALANCE
+              message: Insufficient balance for this operation
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: '#/components/schemas/ApiError'
+          example:
+            error:
+              code: RATE_LIMIT
+              message: Too many requests, please slow down

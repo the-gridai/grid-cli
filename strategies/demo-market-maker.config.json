@@ -1,0 +1,23 @@
+{
+  "_comment": "Demo market maker - faster refresh for live demonstration",
+  "globalSettings": {
+    "refreshIntervalMs": 15000,
+    "minBalance": 100,
+    "maxOrdersPerSide": 2,
+    "levelStepPercent": 1.0
+  },
+  "markets": [
+    {
+      "marketSymbol": "Prime inference",
+      "spreadPercent": 1.5,
+      "orderSize": 3,
+      "enabled": true
+    },
+    {
+      "marketSymbol": "Fast inference",
+      "spreadPercent": 2.0,
+      "orderSize": 5,
+      "enabled": true
+    }
+  ]
+}

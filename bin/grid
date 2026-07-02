@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# grid-cli entry point — loads OTel instrumentation before app code.
+# --require loads the CJS instrumentation setup so that require-in-the-middle
+# can patch Node's http/https modules before any application code imports them.
+#
+# Resolve symlinks so this works when npm links the binary elsewhere.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+exec node --require "$DIR/../dist/src/instrumentation.cjs" "$DIR/../dist/src/cli/index.js" "$@"

@@ -1,0 +1,21 @@
+# Grid SDK CI - Router
+# This workflow triggers the SDK CI implementation on changes to the SDK
+
+name: Grid SDK CI
+
+on:
+  push:
+    branches: [main, dev, demo]
+    paths:
+      - 'grid/packages/sdk-typescript/**'
+      - '.github/workflows/grid-sdk-ci.yml'
+      - '.github/workflows/grid-sdk-ci-impl.yml'
+  pull_request:
+    paths:
+      - 'grid/packages/sdk-typescript/**'
+      - '.github/workflows/grid-sdk-ci.yml'
+      - '.github/workflows/grid-sdk-ci-impl.yml'
+
+jobs:
+  ci:
+    uses: ./.github/workflows/grid-sdk-ci-impl.yml

@@ -1,0 +1,23 @@
+{
+  "_comment": "Demo configuration - faster intervals for live demonstration",
+  "globalSettings": {
+    "autoTransfer": true,
+    "autoList": true,
+    "pricingStrategy": "market_plus_percent",
+    "priceAdjustmentPercent": 1,
+    "issueCronSchedule": "* * * * *",
+    "maxConcurrency": 2
+  },
+  "instruments": [
+    {
+      "instrumentSymbol": "PRIME-INFERENCE",
+      "quantity": 2,
+      "enabled": true
+    },
+    {
+      "instrumentSymbol": "FAST-INFERENCE", 
+      "quantity": 3,
+      "enabled": true
+    }
+  ]
+}
