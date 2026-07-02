@@ -19,8 +19,10 @@ node trading-client.js
 ```bash
 cd examples/python
 pip install requests PyNaCl websocket-client
-python trading_client.py
+python3 -u trading_client.py
 ```
+
+Use unbuffered Python (`python3 -u` or `PYTHONUNBUFFERED=1`) for scripts that place or cancel real orders so logs are visible immediately.
 
 ### Go
 
