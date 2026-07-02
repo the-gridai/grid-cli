@@ -32,7 +32,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 // Get order by ID
-router.get('/:orderId', (req: Request, res: Response) => {
+router.get('/:orderId', (req: Request<{ orderId: string }>, res: Response) => {
   const order = orders.get(req.params.orderId);
 
   if (!order) {
@@ -133,7 +133,7 @@ router.post('/', (req: Request, res: Response) => {
 });
 
 // Update order
-router.put('/:orderId', (req: Request, res: Response) => {
+router.put('/:orderId', (req: Request<{ orderId: string }>, res: Response) => {
   const order = orders.get(req.params.orderId);
 
   if (!order) {
@@ -168,7 +168,7 @@ router.put('/:orderId', (req: Request, res: Response) => {
 });
 
 // Cancel order
-router.delete('/:orderId', (req: Request, res: Response) => {
+router.delete('/:orderId', (req: Request<{ orderId: string }>, res: Response) => {
   const order = orders.get(req.params.orderId);
 
   if (!order) {
