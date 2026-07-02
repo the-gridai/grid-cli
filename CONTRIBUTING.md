@@ -31,6 +31,10 @@ cd grid/mock-server && npm test
 - Add a `CHANGELOG.md` entry under `[Unreleased]` for user-visible changes
 - Keep PRs focused; one logical change per PR
 
+## Merging
+
+`main` is protected: PRs need one approving review, green required checks (CI lint/test, SDK tests, mock-server tests, Docker build), and resolved conversations. PRs are **squash-merged** — the PR title becomes the commit message on `main`, so use a conventional, descriptive title (`feat: …`, `fix: …`).
+
 ## Conventions
 
 - ES Modules only — no `require()` (see `AGENTS.md`)

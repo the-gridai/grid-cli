@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Repository process hardening: branch protection docs, PR/issue templates, CODEOWNERS, least-privilege workflow permissions, and a protected-main release flow in `skills/release-version`.
+
 ## [0.11.0] - 2026-07-02
 
 ### Added
