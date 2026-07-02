@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Dependency updates (consolidated Dependabot batch): root — cron-parser 5.6.1, react 19.2.7 / @types/react 19.2.17, tsc-alias 1.8.17, @opentelemetry/sdk-trace-base 2.8.0, @typescript-eslint/eslint-plugin 8.62.1; SDK — axios 1.18.1, ws 8.21.0, TypeScript 6.0.3, @types/node 26, vitest 4.1.9; mock server — express 5.2.1 (with path-param typing and `*splat` wildcard fixes), ws 8.21.0, tsx 4.22.4, vitest 4.1.9, @typescript-eslint/eslint-plugin 8.62.1; workflows — actions/checkout v7, docker/setup-buildx-action v4, docker/build-push-action v7.
+- Dependency updates (consolidated Dependabot batch): root — cron-parser 5.6.1, react 19.2.7 / @types/react 19.2.17, tsc-alias 1.8.17, @opentelemetry/sdk-trace-base 2.8.0, @typescript-eslint/eslint-plugin 8.62.1; SDK — axios 1.18.1, ws 8.21.0, TypeScript 6.0.3, @types/node 26, vitest 4.1.9; mock server — express 5.2.1 (with path-param typing and `*splat` wildcard fixes), ws 8.21.0, tsx 4.22.4, vitest 4.1.9, @typescript-eslint/eslint-plugin 8.62.1; workflows — actions/checkout v7, docker/setup-buildx-action v4, docker/build-push-action v7. Minimum Node for the grid/ subtree raised to 20.12 (vitest 4.1 requirement; Node 18 is EOL) and the SDK CI matrix now tests Node 20/22/24.
 
 ### Added
 

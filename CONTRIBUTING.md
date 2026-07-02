@@ -12,7 +12,7 @@ npm run build
 npm link .          # optional: global `grid` command
 ```
 
-Node.js >= 18 (20 recommended). No backend access is required for development — use the mock server: `cd grid/mock-server && npm install && npm run dev`, then `API_URL=http://localhost:3000/v1 grid …`.
+Node.js >= 20.12 (20 LTS or newer recommended). No backend access is required for development — use the mock server: `cd grid/mock-server && npm install && npm run dev`, then `API_URL=http://localhost:3000/v1 grid …`.
 
 ## Before You Open a PR
 
