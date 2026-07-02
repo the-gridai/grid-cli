@@ -721,55 +721,66 @@ export class ApiClient {
   }
 
   /**
-   * Cancel all open orders
-   * 
-   * @returns Promise resolving to number of cancelled orders
+   * Open-order counts from GridExchange projections (eventually consistent).
    */
-  public async cancelAllOrders(): Promise<{ cancelled: number }> {
-    try {
-      const orders = await this.listOrders({ status: 'active' } as any); // API uses 'active' not 'open'
-      
-      if (orders.length === 0) {
-        return { cancelled: 0 };
+  public async countOpenOrders(): Promise<{
+    count: number;
+    by_market: Array<{ market_id: string; count: number }>;
+  }> {
+    return withRetry(async () => {
+      const response = await this.rateLimiter.execute(() =>
+        this.client.get<
+          ApiResponse<{
+            count: number;
+            by_market: Array<{ market_id: string; count: number }>;
+          }>
+        >('/orders/count')
+      );
+
+      const data = response.data?.data;
+      if (!data || typeof data.count !== 'number') {
+        throw new ApiError('Invalid response format', response.status || 500);
       }
 
-      logger.info('Canceling orders', { count: orders.length });
-      
-      // Cancel in batches to avoid overwhelming API
-      const batchSize = 5;
-      let cancelled = 0;
-      
-      for (let i = 0; i < orders.length; i += batchSize) {
-        const batch = orders.slice(i, i + batchSize);
-        const batchPromises = batch.map(order =>
-          this.cancelOrder(order.id || order.order_id!, { maxRetries: 0 }).then(() => {
-            cancelled++;
-            return true;
-          }).catch(error => {
-            logger.warn('Failed to cancel order', {
-              orderId: order.id || order.order_id,
-              errorName: error?.name,
-              statusCode: error?.statusCode,
-              message: error?.message,
-              details: error?.details
-            });
-            return false;
-          })
-        );
-        
-        await Promise.all(batchPromises);
-        
-        // Small delay between batches
-        if (i + batchSize < orders.length) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+      return {
+        count: data.count,
+        by_market: data.by_market ?? [],
+      };
+    });
+  }
+
+  /**
+   * Cancel all open orders for the authenticated trader.
+   *
+   * Uses `DELETE /orders` (account-wide) or `DELETE /markets/:market_id/orders`
+   * when `marketId` is set. The `cancelled` field is a pre-cancel projection
+   * count from Cortex (telemetry; may be stale vs actual aggregate cancels).
+   *
+   * @param marketId - Optional market id to scope cancellation
+   * @returns Promise resolving to reported cancelled count
+   */
+  public async cancelAllOrders(marketId?: string): Promise<{ cancelled: number }> {
+    return withRetry(async () => {
+      const path =
+        marketId != null && marketId !== ''
+          ? `/markets/${encodeURIComponent(marketId)}/orders`
+          : '/orders';
+
+      const response = await this.rateLimiter.execute(() =>
+        this.client.delete<ApiResponse<{ cancelled: number }>>(path)
+      );
+
+      if (response.status === 200 && response.data?.data) {
+        const cancelled = response.data.data.cancelled;
+        if (typeof cancelled !== 'number') {
+          throw new ApiError('Invalid response format', response.status);
         }
+        logger.info('Bulk cancel completed', { marketId: marketId ?? null, cancelled });
+        return { cancelled };
       }
-      
-      return { cancelled };
-    } catch (error) {
-      logger.error('Failed to list orders for cancellation', { error });
-      throw error;
-    }
+
+      throw new ApiError(`Unexpected response status: ${response.status}`, response.status);
+    });
   }
 
   /**
