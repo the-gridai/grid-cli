@@ -60,7 +60,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 // Get trade by ID
-router.get('/:tradeId', (req: Request, res: Response) => {
+router.get('/:tradeId', (req: Request<{ tradeId: string }>, res: Response) => {
   const trade = trades.get(req.params.tradeId);
 
   if (!trade) {

@@ -62,7 +62,7 @@ router.get('/:instrumentId', (req: Request, res: Response) => {
 });
 
 // Get instrument by symbol
-router.get('/by-symbol/:symbol', (req: Request, res: Response) => {
+router.get('/by-symbol/:symbol', (req: Request<{ symbol: string }>, res: Response) => {
   const instrument = instruments.find(
     (i) => i.symbol.toLowerCase() === req.params.symbol.toLowerCase()
   );

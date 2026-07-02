@@ -45,8 +45,8 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Handle preflight requests
-app.options('*', (_req: Request, res: Response) => {
+// Handle preflight requests (express 5 / path-to-regexp v8 wildcard syntax)
+app.options('*splat', (_req: Request, res: Response) => {
   res.sendStatus(204);
 });
 
