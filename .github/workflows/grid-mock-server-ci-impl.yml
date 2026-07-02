@@ -6,6 +6,9 @@ name: Mock Server CI Implementation
 on:
   workflow_call:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Test Mock Server

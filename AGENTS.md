@@ -57,9 +57,9 @@ Your own strategies can live anywhere: `grid strategy start /path/to/my-bot.ts` 
 
 ## Branching and PRs
 
-- `main` is the only long-lived branch; all changes land via PRs
-- Never push directly to `main`
-- CI (`.github/workflows/ci.yml`) must be green: lint, typecheck, build, unit tests, SDK tests, mock-server tests, Docker build
+- `main` is the only long-lived branch and is **protected**: PRs only, 1 approving review, required checks green, conversations resolved, linear history
+- Merges are **squash-only** (PR title becomes the commit subject — write it well); head branches auto-delete on merge
+- Required checks (from `ci.yml`): Lint/Type Check/Test, External SDK Tests, Mock Server Tests, Docker Build Test
 
 ```bash
 git checkout main && git pull
@@ -78,8 +78,8 @@ Follow [`skills/release-version/SKILL.md`](skills/release-version/SKILL.md) for 
 1. **Quality gate:** `npm run prepush` at the root; `npm test` in `grid/packages/sdk-typescript` and `grid/mock-server`.
 2. **Version bump:** `grid dev version --patch|--minor|--major` (single source of truth: `package.json`; the CLI reads it dynamically via `src/core/version.ts`).
 3. **Changelog:** move `[Unreleased]` entries in `CHANGELOG.md` under a dated `## [X.Y.Z]` header (Keep a Changelog format). Keep an empty `[Unreleased]` section at the top.
-4. **Commit and tag:** `git commit -am "chore: Release vX.Y.Z"`, then `git tag -a vX.Y.Z -m "vX.Y.Z"` and push both.
-5. **Verify CI green** on `main` after the push — a red CI means the release is broken for consumers.
+4. **Release PR:** commit the bump + changelog on a `release/vX.Y.Z` branch, open a PR, squash-merge after approval, then tag the merged commit on `main` (`git tag -a vX.Y.Z && git push origin vX.Y.Z`).
+5. **Verify CI green** on `main` after the merge — a red CI means the release is broken for consumers.
 6. The `v*` tag triggers `.github/workflows/grid-release.yml`: cross-platform binaries + GitHub Release. RC/beta/alpha suffixes (`v0.12.0-rc.1`) are marked prerelease.
 
 Use RCs for major features or breaking changes; skip them for bug fixes and docs.

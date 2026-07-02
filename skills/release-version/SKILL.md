@@ -75,15 +75,29 @@ git tag v0.12.0-rc.1 && git push origin v0.12.0-rc.1
 
 Skip RCs for bug fixes, docs, and small well-tested enhancements.
 
-### 6. Commit and Tag
+### 6. Open the Release PR, Merge, Tag
+
+`main` is protected (required checks + 1 review, squash merges only) — release commits land via PR like everything else:
 
 ```bash
+git checkout -b release/vX.Y.Z
 git add -A
 git commit -m "chore: Release vX.Y.Z"
+git push -u origin release/vX.Y.Z
+gh pr create --base main --title "chore: Release vX.Y.Z" \
+  --body "Version bump + changelog for vX.Y.Z. Tag will be pushed after merge."
+```
+
+After approval and green checks, squash-merge, then tag the resulting commit on `main`:
+
+```bash
+gh pr merge --squash
+git checkout main && git pull origin main
 git tag -a vX.Y.Z -m "vX.Y.Z"
-git push origin main
 git push origin vX.Y.Z
 ```
+
+Tag the **merged squash commit on main** — never a branch commit.
 
 ### 7. Verify CI and the Release
 
@@ -95,7 +109,7 @@ gh run list --workflow grid-release.yml --limit 1
 gh release view vX.Y.Z
 ```
 
-**CI must be green before considering the release complete.** If CI fails: fix locally, push the fix, and if the tag must move, delete and re-create it:
+**CI must be green before considering the release complete.** If CI fails: fix via a new PR, and if the tag must move, delete and re-create it:
 
 ```bash
 git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z
@@ -114,8 +128,7 @@ Known limitation: `pkg` binaries can fail for ESM/ink reasons on some platforms 
 
 1. Branch from the tag: `git checkout -b hotfix/vX.Y.Z vX.Y.Z`
 2. Apply the fix, bump the patch version
-3. Follow steps 3–7 above
-4. Merge the hotfix branch back to `main`
+3. Follow steps 3–7 above (hotfix PR targets `main`; tag after merge)
 
 ## Version Pinning in Consumers
 

@@ -34,7 +34,7 @@ ed25519_pub.der
 .config-restart-helper-*/
 
 # Local sandbox (strategy.json + SQLite) used for hand-testing the daemon.
-dev/
+/dev/
 *.swp
 *.swo
 *~

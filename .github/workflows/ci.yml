@@ -11,6 +11,9 @@ on:
   # Run on all PR targets (including stacked feature branches) — not only main/dev/demo
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
