@@ -5,7 +5,7 @@ name: Grid SDK CI
 
 on:
   push:
-    branches: [main, dev, demo]
+    branches: [main]
     paths:
       - 'grid/packages/sdk-typescript/**'
       - '.github/workflows/grid-sdk-ci.yml'
@@ -15,6 +15,9 @@ on:
       - 'grid/packages/sdk-typescript/**'
       - '.github/workflows/grid-sdk-ci.yml'
       - '.github/workflows/grid-sdk-ci-impl.yml'
+
+permissions:
+  contents: read
 
 jobs:
   ci:
