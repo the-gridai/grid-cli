@@ -1,6 +1,6 @@
 {
   "name": "grid-cli",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "CLI and TypeScript SDK for trading on The Grid exchange",
   "type": "module",
   "main": "dist/src/sdk/index.js",

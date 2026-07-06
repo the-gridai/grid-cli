@@ -7,17 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-07-06
+
 ### Added
 
 - **`cancelAllOrders(marketId?)` uses Cortex bulk cancel APIs** (`DELETE /v1/orders`
   account-wide, `DELETE /v1/markets/:market_id/orders` per market) instead of
   listing and cancelling orders one-by-one. Adds `countOpenOrders()` (`GET
-  /v1/orders/count`) and `grid order cancel-all --market <id>`.
-- Repository process hardening: branch protection docs, PR/issue templates, CODEOWNERS, least-privilege workflow permissions, and a protected-main release flow in `skills/release-version`.
+  /v1/orders/count`) and `grid order cancel-all --market <id>` ([#23](https://github.com/the-gridai/grid-cli/pull/23)).
+- Cursor-discoverable release skill at `.cursor/skills/grid-cli-release/SKILL.md` ([#36](https://github.com/the-gridai/grid-cli/pull/36)).
 
 ### Changed
 
-- Dependency updates (consolidated Dependabot batch): root — cron-parser 5.6.1, react 19.2.7 / @types/react 19.2.17, tsc-alias 1.8.17, @opentelemetry/sdk-trace-base 2.8.0, @typescript-eslint/eslint-plugin 8.62.1; SDK — axios 1.18.1, ws 8.21.0, TypeScript 6.0.3, @types/node 26, vitest 4.1.9; mock server — express 5.2.1 (with path-param typing and `*splat` wildcard fixes), ws 8.21.0, tsx 4.22.4, vitest 4.1.9, @typescript-eslint/eslint-plugin 8.62.1; workflows — actions/checkout v7, docker/setup-buildx-action v4, docker/build-push-action v7. Minimum Node for the grid/ subtree raised to 20.12 (vitest 4.1 requirement; Node 18 is EOL) and the SDK CI matrix now tests Node 20/22/24.
+- Dependency updates (consolidated Dependabot batch): root — cron-parser 5.6.1, react 19.2.7 / @types/react 19.2.17, tsc-alias 1.8.17, @opentelemetry/sdk-trace-base 2.8.0, @typescript-eslint/eslint-plugin 8.62.1; SDK — axios 1.18.1, ws 8.21.0, TypeScript 6.0.3, @types/node 26, vitest 4.1.9, zod 4.4.3, eslint 10.6.0; mock server — express 5.2.1, ws 8.21.0, tsx 4.23.0, vitest 4.1.9, uuid 14.0.1, TypeScript 6.0.3, eslint 10.6.0, @types/node 26.1.0 ([#20](https://github.com/the-gridai/grid-cli/pull/20), [#24](https://github.com/the-gridai/grid-cli/pull/24)–[#30](https://github.com/the-gridai/grid-cli/pull/30)).
+
+### Fixed
+
+- **`grid profile set` preserves OAuth fields** when updating signing keys or API credentials ([#35](https://github.com/the-gridai/grid-cli/pull/35)).
+- **`grid order create` surfaces `auto_mode_trading_restricted`** with a clear account-mode message instead of generic "Authentication failed" ([#35](https://github.com/the-gridai/grid-cli/pull/35)).
+- **`grid diagnostics --json` exposes per-surface status** (`local`, `remote.platform`, `remote.trading`, `remote.consumption`) for scripting ([#35](https://github.com/the-gridai/grid-cli/pull/35)).
+- **`grid consumption keys list` / `grid trading keys list`** show a loading spinner until the API responds, avoiding a brief empty-state flash ([#35](https://github.com/the-gridai/grid-cli/pull/35)).
 
 ## [0.11.0] - 2026-07-02
 
