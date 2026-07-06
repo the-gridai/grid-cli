@@ -27,6 +27,7 @@ import { tradingCommandGroup } from './commands/trading';
 import { uiCommand } from './commands/ui';
 import { configCommand } from './commands/config';
 import { verifyCommand } from './commands/verify';
+import { diagnosticsCommand } from './commands/diagnostics';
 import { loadConfig } from '../core/config/config';
 import { setGlobalProfileOverride } from '../core/config/profiles';
 import { getVersion } from '../core/version';
@@ -82,6 +83,7 @@ const main = async () => {
   program.addCommand(uiCommand);
   program.addCommand(configCommand);
   program.addCommand(verifyCommand);
+  program.addCommand(diagnosticsCommand);
 
   program.on('command:*', () => {
     console.error('Invalid command: %s\nSee --help for a list of available commands.', program.args.join(' '));

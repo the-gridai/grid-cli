@@ -58,6 +58,7 @@ const SIGNED_PATH_PREFIXES = [
   '/transfers',
   '/instruments',
   '/me',
+  '/diagnostics',
 ];
 
 // Import types
@@ -86,6 +87,7 @@ import type {
   TransferFromIssuanceRequest,
 } from '../types/accounts';
 import type { ChatCompletionRequest, ChatCompletionResponse } from '../types/consumption';
+import type { DiagnosticsData, DiagnosticsResponse } from '../types/diagnostics';
 import type { SigningKey, RegisterSigningKeyRequest } from '../types/user';
 import type { ApiResponse } from '../types/api';
 
@@ -1320,6 +1322,23 @@ export class ApiClient {
       
       return response.data.data;
     });
+  }
+
+  /**
+   * Get read-only Trading API diagnostics.
+   */
+  public async getDiagnostics(options?: { timeoutMs?: number }): Promise<DiagnosticsData> {
+    const response = await this.rateLimiter.execute(() =>
+      this.client.get<DiagnosticsResponse>('/diagnostics', {
+        timeout: options?.timeoutMs,
+      })
+    );
+
+    if (!response.data?.data) {
+      throw new ApiError('Invalid diagnostics response format', 500);
+    }
+
+    return response.data.data;
   }
 
   /**
