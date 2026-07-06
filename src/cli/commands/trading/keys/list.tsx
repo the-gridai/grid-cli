@@ -5,11 +5,12 @@ import { Box, Text } from 'ink';
 import { ExchangeClient } from '../../../../sdk/exchange/client';
 import { assertOAuthForExchangeKeys } from '../../keys/oauth-guard';
 import { colors } from '../../../ui/theme';
-import { Header } from '../../../ui/components';
+import { Header, Spinner } from '../../../ui/components';
 
 function SigningKeysListView(): React.ReactElement {
   const [rows, setRows] = useState<{ id: string; label: string; fp?: string }[]>([]);
   const [error, setError] = useState<string | undefined>();
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -25,6 +26,8 @@ function SigningKeysListView(): React.ReactElement {
         );
       } catch (e: any) {
         setError(e.message || String(e));
+      } finally {
+        setLoading(false);
       }
     })();
   }, []);
@@ -32,7 +35,9 @@ function SigningKeysListView(): React.ReactElement {
   return (
     <Box flexDirection="column" paddingY={1}>
       <Header title="TRADING SIGNING KEYS" showSeparator width={60} />
-      {error ? (
+      {loading ? (
+        <Spinner label="Loading signing keys..." type="grid" />
+      ) : error ? (
         <Text color={colors.error}>{error}</Text>
       ) : rows.length === 0 ? (
         <Text color={colors.textMuted}>No signing keys. Create: grid trading keys create --label &lt;name&gt;</Text>

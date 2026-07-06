@@ -50,9 +50,15 @@ export function transformAxiosError(error: AxiosError): Error {
 
   const { status, data } = error.response;
   const errorData = data as any;
-  const errorMessage = errorData?.error?.message || errorData?.message || 'API request failed';
-  const errorCode = errorData?.error?.code || errorData?.code;
-  const errorDetails = errorData?.error?.details || errorData?.details;
+  const errorsBlock = errorData?.errors;
+  const errorDetail = typeof errorsBlock?.detail === 'string' ? errorsBlock.detail : undefined;
+  const errorMessage =
+    errorData?.error?.message ||
+    errorsBlock?.message ||
+    errorData?.message ||
+    'API request failed';
+  const errorCode = errorData?.error?.code || errorData?.code || errorDetail;
+  const errorDetails = errorData?.error?.details || errorData?.details || errorsBlock;
   const requestId = (error.config as any)?.__requestId;
   const requestContext = {
     requestId,
@@ -68,6 +74,19 @@ export function transformAxiosError(error: AxiosError): Error {
     details: errorDetails,
     ...requestContext,
   });
+
+  // Account mode restrictions (403) — not an auth failure
+  if (status === 403 && errorDetail === 'auto_mode_trading_restricted') {
+    const message =
+      errorMessage !== 'API request failed'
+        ? errorMessage
+        : 'Account is in Auto Mode. Switch to Advanced Mode before placing orders.';
+    return new ApiError(message, status, errorDetail, {
+      ...toObject(errorDetails),
+      ...requestContext,
+      responseBody: errorData,
+    });
+  }
 
   // Authentication errors (401, 403)
   if (status === 401 || status === 403) {

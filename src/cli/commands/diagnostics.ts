@@ -59,7 +59,7 @@ export const diagnosticsCommand = new Command('diagnostics')
 
     const filtered = filterResults(results, surface, options.localOnly);
     if (options.json) {
-      console.log(JSON.stringify({ status: overallStatus(filtered), results: filtered }, null, 2));
+      console.log(JSON.stringify(formatDiagnosticsJson(filtered), null, 2));
       return;
     }
 
@@ -273,6 +273,20 @@ function checksStatus(checks: DiagnosticCheck[]): DiagnosticStatus {
 
 function overallStatus(results: SurfaceResult[]): DiagnosticStatus {
   return checksStatus(results.flatMap((result) => result.checks));
+}
+
+function formatDiagnosticsJson(results: SurfaceResult[]): Record<string, unknown> {
+  const bySurface = new Map(results.map((result) => [result.surface, result]));
+  const remoteSurfaces: Array<Exclude<Surface, 'local'>> = ['platform', 'trading', 'consumption'];
+
+  return {
+    status: overallStatus(results),
+    local: bySurface.get('local') ?? null,
+    remote: Object.fromEntries(
+      remoteSurfaces.map((surface) => [surface, bySurface.get(surface) ?? null]),
+    ),
+    results,
+  };
 }
 
 function structuredError(raw: unknown): { code?: string; detail?: string; nextAction?: string } {
