@@ -147,5 +147,53 @@ describe('ApiClient', () => {
       });
     });
   });
+
+  describe('bulk cancel', () => {
+    beforeEach(() => {
+      (ApiClient as any).instance = undefined;
+      (getConfig as jest.Mock).mockReturnValue({
+        API_URL: 'http://test-api.com',
+        PRIVATE_KEY: privateKeyBase64,
+        API_KEY_FINGERPRINT: 'test-fingerprint',
+      });
+    });
+
+    it('countOpenOrders calls GET /orders/count', async () => {
+      const client = ApiClient.getInstance();
+      // @ts-ignore
+      mockAxios = new MockAdapter(client.client);
+      mockAxios.onGet('/orders/count').reply(200, {
+        data: {
+          count: 3,
+          by_market: [{ market_id: 'market-abc', count: 3 }],
+        },
+      });
+
+      await expect(client.countOpenOrders()).resolves.toEqual({
+        count: 3,
+        by_market: [{ market_id: 'market-abc', count: 3 }],
+      });
+    });
+
+    it('cancelAllOrders calls DELETE /orders account-wide', async () => {
+      const client = ApiClient.getInstance();
+      // @ts-ignore
+      mockAxios = new MockAdapter(client.client);
+      mockAxios.onDelete('/orders').reply(200, { data: { cancelled: 5 } });
+
+      await expect(client.cancelAllOrders()).resolves.toEqual({ cancelled: 5 });
+    });
+
+    it('cancelAllOrders calls DELETE /markets/:id/orders when marketId is set', async () => {
+      const client = ApiClient.getInstance();
+      // @ts-ignore
+      mockAxios = new MockAdapter(client.client);
+      mockAxios.onDelete('/markets/market-xyz/orders').reply(200, {
+        data: { cancelled: 2 },
+      });
+
+      await expect(client.cancelAllOrders('market-xyz')).resolves.toEqual({ cancelled: 2 });
+    });
+  });
 });
 
