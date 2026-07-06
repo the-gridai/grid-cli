@@ -73,7 +73,7 @@ gh pr create --base main
 
 ## Release Process
 
-Follow [`skills/release-version/SKILL.md`](skills/release-version/SKILL.md) for the full checklist. Summary:
+For agent guidance, use [`.cursor/skills/grid-cli-release/SKILL.md`](.cursor/skills/grid-cli-release/SKILL.md) (Cursor) or the extended checklist in [`skills/release-version/SKILL.md`](skills/release-version/SKILL.md). Summary:
 
 1. **Quality gate:** `npm run prepush` at the root; `npm test` in `grid/packages/sdk-typescript` and `grid/mock-server`.
 2. **Version bump:** `grid dev version --patch|--minor|--major` (single source of truth: `package.json`; the CLI reads it dynamically via `src/core/version.ts`).
