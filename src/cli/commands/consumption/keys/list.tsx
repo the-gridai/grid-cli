@@ -5,11 +5,12 @@ import { Box, Text } from 'ink';
 import { ExchangeClient } from '../../../../sdk/exchange/client';
 import { assertOAuthForExchangeKeys } from '../../keys/oauth-guard';
 import { colors } from '../../../ui/theme';
-import { Header } from '../../../ui/components';
+import { Header, Spinner } from '../../../ui/components';
 
 function KeysListView(): React.ReactElement {
   const [rows, setRows] = useState<{ id: string; name: string; prefix: string; active: boolean }[]>([]);
   const [error, setError] = useState<string | undefined>();
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -26,6 +27,8 @@ function KeysListView(): React.ReactElement {
         );
       } catch (e: any) {
         setError(e.message || String(e));
+      } finally {
+        setLoading(false);
       }
     })();
   }, []);
@@ -33,7 +36,9 @@ function KeysListView(): React.ReactElement {
   return (
     <Box flexDirection="column" paddingY={1}>
       <Header title="CONSUMPTION API KEYS" showSeparator width={60} />
-      {error ? (
+      {loading ? (
+        <Spinner label="Loading API keys..." type="grid" />
+      ) : error ? (
         <Text color={colors.error}>{error}</Text>
       ) : rows.length === 0 ? (
         <Text color={colors.textMuted}>No API keys. Create one: grid consumption keys create --name &lt;label&gt;</Text>

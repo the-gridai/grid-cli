@@ -134,6 +134,30 @@ describe('transformAxiosError', () => {
       expect(result).toBeInstanceOf(AuthenticationError);
       expect(result.message).toBe('Authentication failed');
     });
+
+    it('should map auto_mode_trading_restricted to ApiError with clear message', () => {
+      const axiosError = {
+        response: {
+          status: 403,
+          data: {
+            errors: {
+              detail: 'auto_mode_trading_restricted',
+              message: 'Trading is not available in Auto mode. Switch to Advanced mode to place, update, or cancel orders.',
+            },
+          },
+        },
+      } as unknown as AxiosError;
+
+      const result = transformAxiosError(axiosError);
+
+      expect(result).toBeInstanceOf(ApiError);
+      expect(result).not.toBeInstanceOf(AuthenticationError);
+      expect(result.message).toBe(
+        'Trading is not available in Auto mode. Switch to Advanced mode to place, update, or cancel orders.',
+      );
+      expect((result as ApiError).code).toBe('auto_mode_trading_restricted');
+      expect((result as ApiError).statusCode).toBe(403);
+    });
   });
 
   describe('Rate limiting (429)', () => {

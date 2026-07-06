@@ -59,8 +59,9 @@ export const profileSetCommand = new Command('set')
       default_max_tokens: options.defaultMaxTokens ?? existingConsumption.default_max_tokens,
     } : undefined;
     
-    // Merge with existing profile (update mode)
+    // Merge with existing profile (update mode); preserve OAuth fields unless cleared via auth logout
     const profile: Profile = {
+      ...existingProfile,
       description: options.description ?? existingProfile.description,
       api_url: options.apiUrl ?? existingProfile.api_url,
       ws_url: options.wsUrl ?? existingProfile.ws_url,
