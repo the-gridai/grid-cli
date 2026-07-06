@@ -21,6 +21,9 @@ grid auth login --profile prod --hostname https://exchange.thegrid.ai
 # Check your auth status
 grid auth status
 
+# Verify Trading API reachability, credentials, mode, balances, and markets
+grid verify
+
 # Log out (revokes tokens)
 grid auth logout
 ```
@@ -106,9 +109,13 @@ The signature is created by signing a message with the following format:
 For example:
 
 ```
-1706500000GET/trading/orders
-1706500000POST/trading/orders{"market_id":"BTC-USD","side":"buy"}
+1706500000GET/v1/orders
+1706500000POST/v1/orders{"market_id":"market_abc","type":"limit","side":"buy","price":"0.68","quantity":1}
 ```
+
+Sign the path component only. Do not include the query string in the signed message; for `GET /v1/orders?status=filled`, sign `/v1/orders`.
+
+Trading private keys are base64-encoded raw Ed25519 seed or secret-key bytes, not PEM blocks. If you are using another language, decode the base64 bytes directly before signing.
 
 ## Key Generation
 
@@ -213,7 +220,7 @@ function signRequest(
 - Store signing keys securely (environment variables, secret managers)
 - Rotate keys periodically
 - Use HTTPS for all requests
-- Validate timestamps server-side (±5 minute tolerance)
+- Keep system clocks synchronized; Trading API signatures use a 30-second timestamp window
 
 ### Don't
 
@@ -226,8 +233,7 @@ function signRequest(
 
 The server validates request timestamps to prevent replay attacks:
 
-- Requests older than 5 minutes are rejected
-- Requests from the future (>1 minute) are rejected
+- Requests more than 30 seconds away from server time are rejected
 
 If you receive timestamp errors:
 
@@ -251,14 +257,24 @@ To use the API, register your public key:
 
 - Verify the message format is exactly `{timestamp}{METHOD}{path}{body}`
 - Check that the body is the exact JSON string sent (no whitespace changes)
-- Ensure the path includes the leading slash
+- Ensure the path includes the leading slash and excludes query strings
 - Verify the method is uppercase
+
+### First-run Trading verifier
+
+Run this before placing live orders:
+
+```bash
+grid verify
+```
+
+The verifier checks `GET /v1/health`, signed `GET /v1/me`, signed `GET /v1/trading-accounts`, and `GET /v1/markets`. It reports Auto/Easy mode as a warning because reads still work, but order create/update/cancel returns `auto_mode_trading_restricted` after onboarding until the account is switched to Advanced mode.
 
 ### Invalid Timestamp
 
 - Synchronize your system clock
 - Check timestamp is in seconds, not milliseconds
-- Ensure timestamp is within ±5 minutes of server time
+- Ensure timestamp is within 30 seconds of server time
 
 ### Invalid Fingerprint
 

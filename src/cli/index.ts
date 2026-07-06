@@ -26,6 +26,7 @@ import { consumptionCommandGroup } from './commands/consumption';
 import { tradingCommandGroup } from './commands/trading';
 import { uiCommand } from './commands/ui';
 import { configCommand } from './commands/config';
+import { verifyCommand } from './commands/verify';
 import { diagnosticsCommand } from './commands/diagnostics';
 import { loadConfig } from '../core/config/config';
 import { setGlobalProfileOverride } from '../core/config/profiles';
@@ -81,6 +82,7 @@ const main = async () => {
   program.addCommand(tradingCommandGroup);
   program.addCommand(uiCommand);
   program.addCommand(configCommand);
+  program.addCommand(verifyCommand);
   program.addCommand(diagnosticsCommand);
 
   program.on('command:*', () => {

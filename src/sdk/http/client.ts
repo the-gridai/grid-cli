@@ -101,6 +101,10 @@ export type TradingApiPingResult =
   | { state: 'unauthorized' }
   | { state: 'offline'; message: string };
 
+export type TradingApiHealthResult =
+  | { state: 'ok'; service?: string }
+  | { state: 'offline'; message: string };
+
 // Import validators
 import {
   validateResponse,
@@ -940,6 +944,49 @@ export class ApiClient {
   }
 
   // ===== Account Methods =====
+
+  /**
+   * Check unauthenticated Trading API liveness with `GET /health`.
+   * This verifies that the Trading listener is reachable before credentials are tested.
+   */
+  public async checkTradingHealth(options?: { timeoutMs?: number }): Promise<TradingApiHealthResult> {
+    const timeoutMs = options?.timeoutMs ?? 5000;
+
+    try {
+      const response = await this.rateLimiter.execute(() =>
+        this.client.get<ApiResponse<{ status?: string; service?: string }>>('/health', {
+          timeout: timeoutMs,
+          validateStatus: () => true,
+        })
+      );
+
+      if (response.status >= 200 && response.status < 300 && response.data?.data?.status === 'ok') {
+        return { state: 'ok', service: response.data.data.service };
+      }
+
+      return {
+        state: 'offline',
+        message: response.status ? `HTTP ${response.status}` : 'unexpected response',
+      };
+    } catch (error: unknown) {
+      const err = error as { code?: string; message?: string };
+      const code = err.code;
+
+      if (code === 'ECONNABORTED' || code === 'ETIMEDOUT') {
+        return { state: 'offline', message: `timed out after ${timeoutMs}ms` };
+      }
+
+      if (code === 'ECONNREFUSED') {
+        return { state: 'offline', message: 'connection refused' };
+      }
+
+      if (code === 'ENOTFOUND') {
+        return { state: 'offline', message: 'host not found' };
+      }
+
+      return { state: 'offline', message: err.message || 'network error' };
+    }
+  }
 
   /**
    * Ping Trading API with `GET /me` (signed). Does not use `withRetry`.
