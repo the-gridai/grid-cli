@@ -20,6 +20,7 @@ import { resolveConsumptionBearerToken } from '../auth/bearer';
 import { OAuthSession, oauthSessionFromConfig } from '../auth/oauth-session';
 import { logger } from '../../core/logging/logger';
 import { ApiError } from '../../core/errors';
+import type { DiagnosticsData, DiagnosticsResponse } from '../types/diagnostics';
 
 import type {
   Model,
@@ -156,6 +157,23 @@ export class ResponsesClient {
       return response.data.data || [];
     } catch (error) {
       throw this.handleError(error, 'listModels');
+    }
+  }
+
+  /**
+   * Get read-only Consumption API diagnostics.
+   */
+  public async getDiagnostics(options?: { timeoutMs?: number }): Promise<DiagnosticsData> {
+    try {
+      const response = await this.client.get<DiagnosticsResponse>('/diagnostics', {
+        timeout: options?.timeoutMs,
+      });
+      if (!response.data?.data) {
+        throw new ApiError('Invalid diagnostics response format', 500);
+      }
+      return response.data.data;
+    } catch (error) {
+      throw this.handleError(error, 'getDiagnostics');
     }
   }
 
