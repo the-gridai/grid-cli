@@ -88,6 +88,8 @@ jobs:
     name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    # Windows pkg builds are best-effort (ESM/ink); do not fail the release workflow.
+    continue-on-error: ${{ matrix.optional }}
 
     strategy:
       fail-fast: false
@@ -96,18 +98,23 @@ jobs:
           - os: ubuntu-latest
             platform: linux-amd64
             pkg_target: node20-linux-x64
+            optional: false
           - os: ubuntu-latest
             platform: linux-arm64
             pkg_target: node20-linux-arm64
+            optional: false
           - os: macos-latest
             platform: darwin-amd64
             pkg_target: node20-macos-x64
+            optional: false
           - os: macos-latest
             platform: darwin-arm64
             pkg_target: node20-macos-arm64
+            optional: false
           - os: windows-latest
             platform: windows-amd64
             pkg_target: node20-win-x64
+            optional: true
 
     steps:
       - name: Checkout code
@@ -141,18 +148,20 @@ jobs:
         shell: bash
 
       - name: Upload artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: grid-${{ matrix.platform }}
           path: dist/binaries/grid-*
           retention-days: 1
+          if-no-files-found: error
 
   release:
     name: Create Release
     runs-on: ubuntu-latest
     needs: build
-    # Run even if some builds failed (e.g., Windows), but not if cancelled
-    if: always() && !cancelled()
+    # Publish when required platform builds succeeded; optional (Windows) may fail.
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     timeout-minutes: 10
 
     permissions:
@@ -193,6 +202,9 @@ jobs:
             ./grid-linux-amd64 --help  # Test it works
             sudo mv grid-linux-amd64 /usr/local/bin/grid  # Install globally
             ```
+            
+            **Windows:** a native binary is not always published (`pkg` + ESM limitations). Use:
+            `npm install -g git+https://github.com/the-gridai/grid-cli.git#${{ github.ref_name }}`
             
             ### Changelog
             
