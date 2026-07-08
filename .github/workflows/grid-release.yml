@@ -183,7 +183,7 @@ jobs:
           find binaries -type f -ls || ls -laR binaries/
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: Grid CLI ${{ github.ref_name }}
           draft: false
