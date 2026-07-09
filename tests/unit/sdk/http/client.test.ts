@@ -148,6 +148,61 @@ describe('ApiClient', () => {
     });
   });
 
+  describe('getAccountLimits', () => {
+    beforeEach(() => {
+      (ApiClient as any).instance = undefined;
+      (getConfig as jest.Mock).mockReturnValue({
+        API_URL: 'http://test-api.com',
+        PRIVATE_KEY: privateKeyBase64,
+        API_KEY_FINGERPRINT: 'test-fingerprint',
+      });
+    });
+
+    it('calls signed GET /account/limits with market_id', async () => {
+      const client = ApiClient.getInstance();
+      // @ts-ignore
+      mockAxios = new MockAdapter(client.client);
+
+      let capturedHeaders: any;
+      let capturedParams: any;
+
+      mockAxios.onGet('/account/limits').reply(config => {
+        capturedHeaders = config.headers;
+        capturedParams = config.params;
+
+        return [200, {
+          data: {
+            market_id: 'market_123',
+            order_rate_limits: {
+              scope: 'user_market',
+              max_orders_per_second: 7,
+              max_orders_per_minute: 420,
+              burst_capacity: 7,
+              window_seconds: 1,
+            },
+            response_headers: {
+              limit: 'x-ratelimit-limit',
+              remaining: 'x-ratelimit-remaining',
+              retry_after: 'retry-after',
+            },
+          },
+        }];
+      });
+
+      await expect(client.getAccountLimits('market_123')).resolves.toMatchObject({
+        market_id: 'market_123',
+        order_rate_limits: {
+          max_orders_per_second: 7,
+        },
+      });
+
+      expect(capturedParams).toEqual({ market_id: 'market_123' });
+      expect(capturedHeaders['x-thegrid-signature']).toBeDefined();
+      expect(capturedHeaders['x-thegrid-timestamp']).toBeDefined();
+      expect(capturedHeaders['x-thegrid-fingerprint']).toBe('test-fingerprint');
+    });
+  });
+
   describe('bulk cancel', () => {
     beforeEach(() => {
       (ApiClient as any).instance = undefined;
