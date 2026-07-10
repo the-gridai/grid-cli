@@ -35,6 +35,22 @@ export interface CurrencyTradingAccount extends TradingAccount {
   currency: string;
 }
 
+export interface AccountLimits {
+  market_id: string;
+  order_rate_limits: {
+    scope: 'user_market';
+    max_orders_per_second: number;
+    max_orders_per_minute: number;
+    burst_capacity: number;
+    window_seconds: number;
+  };
+  response_headers: {
+    limit: string;
+    remaining: string;
+    retry_after: string;
+  };
+}
+
 /**
  * Issuance account (for suppliers)
  */

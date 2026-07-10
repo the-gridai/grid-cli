@@ -58,6 +58,7 @@ const SIGNED_PATH_PREFIXES = [
   '/transfers',
   '/instruments',
   '/me',
+  '/account',
   '/diagnostics',
 ];
 
@@ -82,6 +83,7 @@ import type {
 import type {
   TradingAccount,
   CurrencyTradingAccount,
+  AccountLimits,
   ConsumptionInstrument,
   IssuanceAccount,
   TransferFromIssuanceRequest,
@@ -1331,6 +1333,25 @@ export class ApiClient {
         throw new ApiError('Invalid response format', 500);
       }
       
+      return response.data.data;
+    });
+  }
+
+  /**
+   * Get effective order limits for a market.
+   */
+  public async getAccountLimits(marketId: string): Promise<AccountLimits> {
+    return withRetry(async () => {
+      const response = await this.rateLimiter.execute(() =>
+        this.client.get<ApiResponse<AccountLimits>>('/account/limits', {
+          params: { market_id: marketId },
+        })
+      );
+
+      if (!response.data?.data) {
+        throw new ApiError('Invalid account limits response format', 500);
+      }
+
       return response.data.data;
     });
   }

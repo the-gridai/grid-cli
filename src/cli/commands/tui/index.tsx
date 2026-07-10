@@ -3,15 +3,18 @@ import { Command } from 'commander';
 import { render } from 'ink';
 import { App } from '../../ui/tui';
 import { loadConfig } from '../../../core/config/config';
+import { interactiveTerminalProblem } from '../../utils/tty';
 import chalk from 'chalk';
 
 /**
  * Check if the terminal supports interactive mode (TTY with raw mode)
  */
 function checkTTYSupport(): boolean {
-  if (!process.stdin.isTTY) {
+  const problem = interactiveTerminalProblem();
+
+  if (problem) {
     console.error(chalk.yellow('⚠ Interactive mode requires a TTY terminal.'));
-    console.error(chalk.dim('  Run this command in an interactive terminal, not through pipes or scripts.'));
+    console.error(chalk.dim(`  ${problem}. Run this command in an interactive terminal, not through pipes or scripts.`));
     console.error('');
     console.error(chalk.dim('  Alternatively, use standard CLI commands:'));
     console.error(chalk.cyan('    grid status') + chalk.dim('        - View system status'));

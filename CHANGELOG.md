@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`grid account limits --market-id <id>`** shows the effective order rate limit for your user on a market via the new Trading API `GET /v1/account/limits` endpoint. Also exposed as `ApiClient.getAccountLimits(marketId)` in the SDK.
+
+### Fixed
+
+- **Interactive TUI no longer attempts raw-mode terminal calls in non-TTY environments** (pipes, CI, scripts). `grid` without a subcommand now checks stdin, stdout, and raw-mode support and prints the specific problem plus non-interactive alternatives instead of crashing with a `tcsetattr`-style error.
+
 ## [0.11.1] - 2026-07-06
 
 ### Added
