@@ -10,6 +10,7 @@ import {
   validateArrayResponse,
   OrderSchema,
   TradingAccountSchema,
+  ConsumptionInstrumentSchema,
 } from '../validators.js';
 import { ValidationError } from '../errors.js';
 
@@ -296,5 +297,50 @@ describe('validateArrayResponse', () => {
     ];
 
     expect(() => validateArrayResponse(accounts, TradingAccountSchema)).toThrow(ValidationError);
+  });
+});
+
+describe('ConsumptionInstrumentSchema', () => {
+  const canonicalInstrument = {
+    account_id: 'acc-1',
+    user_id: 'user-1',
+    instrument_id: 'instrument-1',
+    status: 'active',
+    uncommitted_balance: 10,
+    committed_balance: 2,
+    total_balance: 12,
+    total_deposits: 12,
+    total_withdrawals: 0,
+    total_commitments: 2,
+    total_transfers_in: 0,
+    total_transfers_out: 0,
+    created_at: '2026-07-15T00:00:00Z',
+    updated_at: '2026-07-15T00:00:00Z',
+  };
+
+  it('validates the canonical numeric wire shape', () => {
+    const result = ConsumptionInstrumentSchema.parse(canonicalInstrument);
+
+    expect(result).toEqual(canonicalInstrument);
+    expect(result.uncommitted_balance).toBe(10);
+  });
+
+  it('rejects the stale available_balance field', () => {
+    const instrument: Record<string, unknown> = {
+      ...canonicalInstrument,
+      available_balance: 10,
+    };
+    delete instrument.uncommitted_balance;
+
+    expect(() => ConsumptionInstrumentSchema.parse(instrument)).toThrow();
+  });
+
+  it('rejects string consumption balances', () => {
+    expect(() =>
+      ConsumptionInstrumentSchema.parse({
+        ...canonicalInstrument,
+        uncommitted_balance: '10',
+      })
+    ).toThrow();
   });
 });

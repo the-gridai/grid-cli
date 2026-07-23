@@ -36,7 +36,15 @@ import type {
   OpenAIChatMessage,
   OpenAIChatRequest,
   OpenAIChatResponse,
+  UsageReceipt,
+  UsageListResponse,
+  ListUsageParams,
+  UsageSummaryResponse,
+  UsageSummaryParams,
 } from './types';
+
+/** Header carrying the server-issued Grid request id (spend transparency). */
+const REQUEST_ID_HEADER = 'x-grid-request-id';
 
 // HTTP agents for connection reuse
 const httpAgent = new http.Agent({
@@ -59,18 +67,17 @@ export class ResponsesClient {
   private staticBearer: string | undefined;
   private oauthSession: OAuthSession | null = null;
   private readonly profileName: string | undefined;
+  private lastRequestId: string | undefined;
   private static instance: ResponsesClient;
   private static profileInstances: Map<string, ResponsesClient> = new Map();
 
   private constructor(options?: ResponsesClientOptions) {
-    const config = options?.profile 
-      ? getConfigForProfile(options.profile) 
-      : getConfig();
-    
+    const config = options?.profile ? getConfigForProfile(options.profile) : getConfig();
+
     // Priority: explicit option > profile/config consumption URL > fallback to API_URL
     // Profile's consumption_api_url is merged into config.CONSUMPTION_API_URL by getConfigForProfile
     const baseURL = options?.apiUrl || config.CONSUMPTION_API_URL || config.API_URL;
-    
+
     this.profileName = options?.profile;
     const staticBearer = resolveConsumptionBearerToken(config);
     const oauth = oauthSessionFromConfig(config);
@@ -99,16 +106,14 @@ export class ResponsesClient {
 
     // Consumption API: Authorization: Bearer (OAuth token, API key, or GRID_CLI_CONSUMPTION_KEY)
     this.client.interceptors.request.use(async (reqConfig) => {
-      const token = this.oauthSession
-        ? await this.oauthSession.ensureFreshAccessToken()
-        : this.staticBearer;
+      const token = this.oauthSession ? await this.oauthSession.ensureFreshAccessToken() : this.staticBearer;
       if (token) {
         reqConfig.headers.Authorization = `Bearer ${token}`;
       }
       return reqConfig;
     });
 
-    logger.debug('ResponsesClient initialized', { 
+    logger.debug('ResponsesClient initialized', {
       baseURL,
       authType: this.oauthSession ? 'oauth' : this.staticBearer ? 'bearer' : 'none',
     });
@@ -124,7 +129,7 @@ export class ResponsesClient {
     if (profile) {
       const cached = ResponsesClient.profileInstances.get(profile);
       if (cached) return cached;
-      
+
       const instance = new ResponsesClient({ ...options, profile });
       ResponsesClient.profileInstances.set(profile, instance);
       return instance;
@@ -178,6 +183,69 @@ export class ResponsesClient {
   }
 
   // ===========================================================================
+  // Usage receipts (spend transparency)
+  // ===========================================================================
+
+  /**
+   * The Grid request id from the most recent inference dispatch, if any.
+   * Issued via the `x-grid-request-id` response header; use it with
+   * `getUsage()` to fetch tokens and settled cost for that request.
+   */
+  public getLastRequestId(): string | undefined {
+    return this.lastRequestId;
+  }
+
+  /**
+   * Fetch the usage receipt for one request (`GET /v1/usage/:request_id`).
+   * Cost settles asynchronously — `cost.status` is `"pending"` until
+   * reconciliation stamps the real amount.
+   */
+  public async getUsage(requestId: string): Promise<UsageReceipt> {
+    try {
+      const response = await this.client.get<UsageReceipt>(`/usage/${encodeURIComponent(requestId)}`);
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'getUsage');
+    }
+  }
+
+  /**
+   * List usage receipts newest-first with cursor pagination (`GET /v1/usage`).
+   */
+  public async listUsage(params: ListUsageParams = {}): Promise<UsageListResponse> {
+    try {
+      const response = await this.client.get<UsageListResponse>('/usage', { params });
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'listUsage');
+    }
+  }
+
+  /**
+   * Aggregated usage and spend (`GET /v1/usage/summary`): totals plus
+   * optional `group_by=day|model|api_key` buckets. Unpriced consumption is
+   * reported as tokens, never a fabricated dollar amount.
+   */
+  public async getUsageSummary(params: UsageSummaryParams = {}): Promise<UsageSummaryResponse> {
+    try {
+      const response = await this.client.get<UsageSummaryResponse>('/usage/summary', { params });
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'getUsageSummary');
+    }
+  }
+
+  /** Remember the request id issued by the API or echoed by the inference gateway. */
+  private captureRequestId(headers: Record<string, unknown> | undefined): string | undefined {
+    const value = headers?.[REQUEST_ID_HEADER];
+    if (typeof value === 'string' && value.length > 0) {
+      this.lastRequestId = value;
+      return value;
+    }
+    return undefined;
+  }
+
+  // ===========================================================================
   // Responses API
   // ===========================================================================
 
@@ -190,7 +258,11 @@ export class ResponsesClient {
 
     try {
       const response = await this.makeRequestWithRedirect('/chat/completions', chatRequest);
-      return this.toOpenResponsesFormat(response.data, request);
+      const converted = this.toOpenResponsesFormat(response.data, request);
+      if (this.lastRequestId) {
+        converted.request_id = this.lastRequestId;
+      }
+      return converted;
     } catch (error) {
       throw this.handleError(error, 'create');
     }
@@ -205,14 +277,16 @@ export class ResponsesClient {
     chatRequest.stream_options = { include_usage: true };
 
     try {
-      // Get the redirect URL
+      // Get the redirect URL (also captures x-grid-request-id from the 307)
       const redirectUrl = await this.getRedirectUrl('/chat/completions', chatRequest);
-      
+
       // Make streaming request to the inference gateway
       const response = await this.makeStreamingRequest(redirectUrl, chatRequest);
-      
+      this.captureRequestId(response.headers);
+      const requestId = this.lastRequestId;
+
       // Parse SSE events
-      yield* this.parseSSEStream(response, request);
+      yield* this.parseSSEStream(response.stream, request, requestId);
     } catch (error) {
       yield {
         type: 'error',
@@ -232,8 +306,11 @@ export class ResponsesClient {
    * Make a request that handles the 307 redirect to the inference gateway
    */
   private async makeRequestWithRedirect(path: string, data: OpenAIChatRequest): Promise<{ data: OpenAIChatResponse }> {
+    this.lastRequestId = undefined;
+
     // First request to the API
     const apiResponse = await this.client.post(path, data);
+    this.captureRequestId(apiResponse.headers);
 
     // Handle 307 redirect
     if (apiResponse.status === 307) {
@@ -253,6 +330,8 @@ export class ResponsesClient {
         httpsAgent,
       });
 
+      // The inference gateway echoes the same id on the final response.
+      this.captureRequestId(gatewayResponse.headers);
       return gatewayResponse;
     }
 
@@ -285,7 +364,7 @@ export class ResponsesClient {
     } catch {
       // If URL parsing fails, return as-is
     }
-    
+
     return url;
   }
 
@@ -293,7 +372,10 @@ export class ResponsesClient {
    * Get the redirect URL from the API
    */
   private async getRedirectUrl(path: string, data: OpenAIChatRequest): Promise<string> {
+    this.lastRequestId = undefined;
+
     const response = await this.client.post(path, data);
+    this.captureRequestId(response.headers);
 
     if (response.status === 307) {
       const redirectUrl = response.headers.location;
@@ -310,33 +392,27 @@ export class ResponsesClient {
   }
 
   /**
-   * Make a streaming request to the LLM gateway
-   * 
-   * In local development, this is LiteLLM which requires its own API key.
-   * The LLM_GATEWAY_API_KEY env var (defaults to sk-1234 for local dev) is used.
-   * 
+   * Make a streaming request to the inference gateway. The signed redirect URL is the
+   * authorization mechanism, matching the non-streaming redirect flow.
+   *
    * Uses AbortController to prevent hanging on slow/stalled connections.
    * Default timeout is 5 minutes for streaming responses.
    */
   private async makeStreamingRequest(
-    url: string, 
+    url: string,
     data: OpenAIChatRequest,
     timeoutMs: number = 300000 // 5 minute default for streaming
-  ): Promise<NodeJS.ReadableStream> {
-    // Get LLM gateway API key from env (default for local LiteLLM: sk-1234)
-    const llmGatewayKey = process.env.LLM_GATEWAY_API_KEY || 'sk-1234';
-    
+  ): Promise<{ stream: NodeJS.ReadableStream; headers: Record<string, unknown> }> {
     // Create AbortController for timeout handling
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
     }, timeoutMs);
-    
+
     try {
       const response = await axios.post(url, data, {
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${llmGatewayKey}`,
         },
         responseType: 'stream',
         signal: controller.signal,
@@ -344,11 +420,11 @@ export class ResponsesClient {
         httpsAgent,
       });
 
-      // Clear timeout once we start receiving data, 
+      // Clear timeout once we start receiving data,
       // but set up a new one for idle detection
       clearTimeout(timeoutId);
-      
-      return response.data;
+
+      return { stream: response.data, headers: response.headers };
     } catch (error) {
       clearTimeout(timeoutId);
       if (controller.signal.aborted) {
@@ -362,8 +438,9 @@ export class ResponsesClient {
    * Parse SSE stream into Open Responses events
    */
   private async *parseSSEStream(
-    stream: NodeJS.ReadableStream, 
-    originalRequest: CreateResponseRequest
+    stream: NodeJS.ReadableStream,
+    originalRequest: CreateResponseRequest,
+    requestId?: string
   ): AsyncGenerator<StreamingEvent> {
     let buffer = '';
     const responseId = `resp_${Date.now()}`;
@@ -382,6 +459,7 @@ export class ResponsesClient {
         model,
         items: [],
         status: 'in_progress',
+        request_id: requestId,
       },
     };
 
@@ -395,7 +473,7 @@ export class ResponsesClient {
       for (const line of lines) {
         if (line.startsWith('data: ')) {
           const data = line.slice(6).trim();
-          
+
           if (data === '[DONE]') {
             // Build final message item
             if (currentItemContent) {
@@ -423,6 +501,7 @@ export class ResponsesClient {
                 items,
                 usage,
                 status: 'completed',
+                request_id: requestId,
               },
             };
             return;
@@ -430,7 +509,7 @@ export class ResponsesClient {
 
           try {
             const parsed = JSON.parse(data);
-            
+
             // Update model from response
             if (parsed.model) {
               model = parsed.model;
@@ -448,7 +527,7 @@ export class ResponsesClient {
             // Process choices
             if (parsed.choices && parsed.choices.length > 0) {
               const choice = parsed.choices[0];
-              
+
               // Handle tool calls
               if (choice.delta?.tool_calls) {
                 for (const toolCall of choice.delta.tool_calls) {
@@ -459,7 +538,7 @@ export class ResponsesClient {
                       name: toolCall.function.name || '',
                       arguments: toolCall.function.arguments || '',
                     };
-                    
+
                     yield {
                       type: 'response.item.added',
                       item: toolItem,
@@ -521,6 +600,7 @@ export class ResponsesClient {
         items,
         usage,
         status: 'completed',
+        request_id: requestId,
       },
     };
   }
@@ -599,7 +679,7 @@ export class ResponsesClient {
     // Convert choices to items
     if (data.choices && data.choices.length > 0) {
       const choice = data.choices[0];
-      
+
       // Handle assistant message
       if (choice.message?.content) {
         items.push({
@@ -625,8 +705,8 @@ export class ResponsesClient {
     // Determine status
     let status: Response['status'] = 'completed';
     let requiredAction: Response['required_action'];
-    
-    const toolCalls = items.filter(i => i.type === 'tool_call') as ToolCallItem[];
+
+    const toolCalls = items.filter((i) => i.type === 'tool_call') as ToolCallItem[];
     if (toolCalls.length > 0) {
       status = 'requires_action';
       requiredAction = {
@@ -641,11 +721,13 @@ export class ResponsesClient {
       created: data.created || Math.floor(Date.now() / 1000),
       model: data.model || originalRequest.model,
       items,
-      usage: data.usage ? {
-        prompt_tokens: data.usage.prompt_tokens || 0,
-        completion_tokens: data.usage.completion_tokens || 0,
-        total_tokens: data.usage.total_tokens || 0,
-      } : undefined,
+      usage: data.usage
+        ? {
+            prompt_tokens: data.usage.prompt_tokens || 0,
+            completion_tokens: data.usage.completion_tokens || 0,
+            total_tokens: data.usage.total_tokens || 0,
+          }
+        : undefined,
       status,
       required_action: requiredAction,
     };
@@ -662,10 +744,11 @@ export class ResponsesClient {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError<any>;
       const status = axiosError.response?.status || 500;
-      const message = axiosError.response?.data?.error?.message 
-        || axiosError.response?.data?.errors?.detail
-        || axiosError.message
-        || 'Unknown error';
+      const message =
+        axiosError.response?.data?.error?.message ||
+        axiosError.response?.data?.errors?.detail ||
+        axiosError.message ||
+        'Unknown error';
 
       logger.error(`ResponsesClient.${operation} failed`, {
         status,

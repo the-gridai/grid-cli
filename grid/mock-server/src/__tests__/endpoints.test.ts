@@ -168,6 +168,9 @@ describe('Accounts endpoints', () => {
     const { status, data } = await fetchJson('/trading/consumption-accounts');
     expect(status).toBe(200);
     expect(Array.isArray(data.data)).toBe(true);
+    expect(data.data[0].uncommitted_balance).toBe(5000000);
+    expect(typeof data.data[0].uncommitted_balance).toBe('number');
+    expect(data.data[0].available_balance).toBeUndefined();
   });
 
   it('should get current user', async () => {
