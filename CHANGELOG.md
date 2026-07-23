@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`grid account limits --market-id <id>`** shows the effective order rate limit for your user on a market via the new Trading API `GET /v1/account/limits` endpoint. Also exposed as `ApiClient.getAccountLimits(marketId)` in the SDK.
+- **Cursor-aware order listing in the SDK** adds `listOrdersPage`, `listAllOrders`, `listOrdersRawPage`, and `listAllOrdersRaw`, including duplicate protection and explicit truncation reasons when a complete result cannot be guaranteed.
 
 ### Fixed
 

@@ -77,15 +77,58 @@ export interface Order {
 }
 
 /**
- * Order list filters
+ * Order list filters (flat Trading REST query params).
+ *
+ * `from_date` / `to_date` are SDK aliases mapped to `start_datetime` /
+ * `end_datetime` before the request is sent.
  */
 export interface OrderFilters {
-  status?: OrderStatus | OrderStatus[];
+  status?: OrderStatus | string | Array<OrderStatus | string>;
   market_id?: string;
+  instrument_id?: string;
+  trader_id?: string;
   side?: OrderSide;
   type?: OrderType;
   from_date?: string;
   to_date?: string;
+  start_datetime?: string;
+  end_datetime?: string;
+  /** Page size (API maximum 500; default 50 if omitted). */
+  limit?: number | string;
+  /** Cursor from previous response's `paging.next_cursor`. */
+  next?: string;
+  /** Cursor from previous response's `paging.prev_cursor`. */
+  prev?: string;
+}
+
+/**
+ * Options for exhausting cursor pages on Trading REST list endpoints.
+ */
+export interface ListAllOrdersOptions {
+  /** Page size sent as `limit` (clamped to 1..500). Default 500. */
+  pageSize?: number;
+  /** Safety cap on number of HTTP pages. Default 20. */
+  maxPages?: number;
+}
+
+/** Why an exhaustive list stopped before the server reported completion. */
+export type ListAllTruncationReason =
+  | 'max_pages'
+  | 'missing_cursor'
+  | 'stuck_cursor'
+  | 'empty_page_with_more';
+
+/**
+ * Result of exhausting cursor pages. Callers that mutate local state from the
+ * list (reconcile / cancel-all) MUST treat `truncated: true` as incomplete —
+ * never assume unseen IDs are gone.
+ */
+export interface ListAllResult<T> {
+  data: T[];
+  truncated: boolean;
+  truncationReason?: ListAllTruncationReason;
+  pagesFetched: number;
+  hasMore: boolean;
 }
 
 /**
