@@ -11,6 +11,26 @@ export interface ApiResponse<T> {
   data: T;
   error?: ApiErrorResponse;
   meta?: ApiResponseMeta;
+  /** Trading REST cursor pagination (GET /v1/orders, etc.) */
+  paging?: CursorPaging;
+}
+
+/**
+ * Trading API cursor paging envelope.
+ * Pass `paging.next_cursor` as the top-level `next` query parameter.
+ */
+export interface CursorPaging {
+  next_cursor: string | null;
+  prev_cursor: string | null;
+  has_more: boolean;
+}
+
+/**
+ * One page of a cursor-paginated Trading REST list response.
+ */
+export interface PaginatedResult<T> {
+  data: T[];
+  paging: CursorPaging;
 }
 
 /**

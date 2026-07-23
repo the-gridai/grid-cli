@@ -70,7 +70,11 @@ import type {
   Trade,
   OrderFilters,
   TradeFilters,
+  ListAllOrdersOptions,
+  ListAllResult,
+  ListAllTruncationReason,
 } from '../types/orders';
+import type { CursorPaging, PaginatedResult } from '../types/api';
 import type {
   Market,
   Instrument,
@@ -560,59 +564,256 @@ export class ApiClient {
   // ===== Order Methods =====
 
   /**
-   * List orders with optional filtering
-   * 
-   * @param filters - Order filters
-   * @returns Promise resolving to array of orders
-   */
-  public async listOrders(filters?: OrderFilters): Promise<Order[]> {
-    return withRetry(async () => {
-      const response = await this.rateLimiter.execute(() =>
-        this.client.get<ApiResponse<Order[]>>('/orders', { params: this.buildFilters(filters) })
-      );
-      
-      if (!response.data?.data) {
-        throw new ApiError('Invalid response format', 500);
-      }
-      
-      return validateArrayResponse(response.data.data, OrderSchema);
-    });
-  }
-
-  /**
-   * Statuses the exchange matching engine considers non-terminal.
-   * Used for client-side filtering since the API may not honour the
-   * `status` query parameter.
+   * Exchange order statuses treated as non-terminal.
+   * Used for client-side filtering when callers ask for `status=active`.
    */
   private static readonly ACTIVE_STATUSES = new Set([
     'active', 'pending', 'partially_filled', 'open', 'cancellation_pending',
   ]);
 
+  /** Maximum page size accepted by the orders endpoint. */
+  private static readonly MAX_ORDER_PAGE_SIZE = 500;
+
   /**
-   * List orders without Zod validation (raw API response).
-   * Use this for cancel/cleanup operations where schema mismatches should not
-   * prevent us from discovering and cancelling orders.
+   * List one validated page of orders.
    *
-   * When `filters.status` is `'active'`, results are filtered client-side
-   * because the API may ignore the raw status query parameter.
+   * For a complete result set use {@link listAllOrders}. Pass `next` from a
+   * prior page's `paging.next_cursor` to advance.
    */
-  public async listOrdersRaw(filters?: Record<string, string>): Promise<any[]> {
+  public async listOrders(filters?: OrderFilters): Promise<Order[]> {
+    const page = await this.listOrdersPage(filters);
+    return page.data;
+  }
+
+  /** List one validated page of orders with cursor metadata. */
+  public async listOrdersPage(filters?: OrderFilters): Promise<PaginatedResult<Order>> {
     return withRetry(async () => {
       const response = await this.rateLimiter.execute(() =>
-        this.client.get<any>('/orders', { params: filters })
+        this.client.get<ApiResponse<Order[]>>('/orders', {
+          params: this.buildOrderQueryParams(filters),
+        })
+      );
+
+      if (!response.data?.data) {
+        throw new ApiError('Invalid response format', 500);
+      }
+
+      return {
+        data: validateArrayResponse(response.data.data, OrderSchema),
+        paging: ApiClient.normalizePaging(response.data.paging),
+      };
+    });
+  }
+
+  /**
+   * Exhaust cursor pages and return all matching validated orders.
+   * Check `truncated` before treating the list as complete.
+   */
+  public async listAllOrders(
+    filters?: OrderFilters,
+    options?: ListAllOrdersOptions
+  ): Promise<ListAllResult<Order>> {
+    return this.paginateOrders(
+      (pageFilters) => this.listOrdersPage(pageFilters),
+      filters as Record<string, unknown> | undefined,
+      options
+    );
+  }
+
+  /**
+   * List one page without response validation.
+   * Useful when schema mismatches must not hide orders.
+   *
+   * Active-status results are also filtered client-side for compatibility
+   * with deployments that do not filter status server-side.
+   */
+  public async listOrdersRaw(filters?: Record<string, string>): Promise<any[]> {
+    const page = await this.listOrdersRawPage(filters);
+    return page.data;
+  }
+
+  /** List one raw page of orders with cursor metadata. */
+  public async listOrdersRawPage(
+    filters?: Record<string, string>
+  ): Promise<PaginatedResult<any>> {
+    return withRetry(async () => {
+      const params = this.buildOrderQueryParams(filters);
+      const response = await this.rateLimiter.execute(() =>
+        this.client.get<any>('/orders', { params })
       );
 
       const data = response.data?.data;
-      let orders: any[] = Array.isArray(data) ? data : Array.isArray(response.data) ? response.data : [];
+      let orders: any[] = Array.isArray(data)
+        ? data
+        : Array.isArray(response.data)
+          ? response.data
+          : [];
 
-      if (filters?.status?.toLowerCase() === 'active') {
+      const statusFilter = filters?.status ?? params.status;
+      if (
+        typeof statusFilter === 'string' &&
+        statusFilter.toLowerCase() === 'active'
+      ) {
         orders = orders.filter((o: any) =>
           ApiClient.ACTIVE_STATUSES.has(String(o?.status ?? '').toLowerCase())
         );
       }
 
-      return orders;
+      return {
+        data: orders,
+        paging: ApiClient.normalizePaging(response.data?.paging),
+      };
     });
+  }
+
+  /**
+   * Exhaust cursor pages for raw order listings.
+   *
+   * Numeric `page` is never sent because this endpoint advances with
+   * `next=<paging.next_cursor>`. Pagination stops safely and reports
+   * `truncated: true` if the server omits or repeats a required cursor.
+   */
+  public async listAllOrdersRaw(
+    filters?: Record<string, string>,
+    options?: ListAllOrdersOptions
+  ): Promise<ListAllResult<any>> {
+    return this.paginateOrders(
+      (pageFilters) =>
+        this.listOrdersRawPage(pageFilters as Record<string, string>),
+      filters,
+      options
+    );
+  }
+
+  private async paginateOrders<T>(
+    fetchPage: (
+      filters: Record<string, unknown>
+    ) => Promise<PaginatedResult<T>>,
+    filters?: Record<string, unknown>,
+    options?: ListAllOrdersOptions
+  ): Promise<ListAllResult<T>> {
+    const pageSize = ApiClient.clampOrderPageSize(options?.pageSize ?? 500);
+    const maxPages = Math.max(1, options?.maxPages ?? 20);
+    const baseFilters: Record<string, unknown> = { ...(filters ?? {}) };
+    delete baseFilters.page;
+    delete baseFilters.next;
+    delete baseFilters.prev;
+    delete baseFilters.limit;
+
+    const all: T[] = [];
+    const seenIds = new Set<string>();
+    let nextCursor: string | undefined;
+    let pagesFetched = 0;
+    let truncated = false;
+    let truncationReason: ListAllTruncationReason | undefined;
+    let hasMore = false;
+
+    for (let pageIndex = 0; pageIndex < maxPages; pageIndex++) {
+      const pageFilters: Record<string, unknown> = {
+        ...baseFilters,
+        limit: String(pageSize),
+      };
+      if (nextCursor) {
+        pageFilters.next = nextCursor;
+      }
+
+      const { data, paging } = await fetchPage(pageFilters);
+      pagesFetched++;
+      hasMore = paging.has_more;
+
+      for (const order of data) {
+        const orderId = String(
+          (order as any)?.order_id ?? (order as any)?.id ?? ''
+        );
+        if (!orderId) {
+          logger.warn('Dropping order row without an id during pagination', {
+            marketId: baseFilters.market_id,
+            pageIndex: pageIndex + 1,
+          });
+          continue;
+        }
+        if (seenIds.has(orderId)) continue;
+        seenIds.add(orderId);
+        all.push(order);
+      }
+
+      if (!paging.has_more) {
+        hasMore = false;
+        break;
+      }
+
+      const cursor = paging.next_cursor;
+      if (!cursor) {
+        truncated = true;
+        truncationReason = 'missing_cursor';
+        logger.warn('Order pagination stopped because the next cursor was missing', {
+          fetched: all.length,
+          marketId: baseFilters.market_id,
+          pageIndex: pageIndex + 1,
+        });
+        break;
+      }
+
+      if (cursor === nextCursor) {
+        truncated = true;
+        truncationReason = 'stuck_cursor';
+        logger.error('Order pagination stopped because the cursor did not advance', {
+          cursor,
+          fetched: all.length,
+          marketId: baseFilters.market_id,
+        });
+        break;
+      }
+
+      nextCursor = cursor;
+
+      if (data.length === 0) {
+        truncated = true;
+        truncationReason = 'empty_page_with_more';
+        break;
+      }
+
+      if (pageIndex + 1 >= maxPages) {
+        truncated = true;
+        truncationReason = 'max_pages';
+        logger.warn('Order pagination reached maxPages before exhaustion', {
+          maxPages,
+          fetched: all.length,
+          marketId: baseFilters.market_id,
+        });
+        break;
+      }
+    }
+
+    return {
+      data: all,
+      truncated,
+      truncationReason,
+      pagesFetched,
+      hasMore: truncated ? true : hasMore,
+    };
+  }
+
+  private static clampOrderPageSize(size: number): number {
+    if (!Number.isFinite(size)) return ApiClient.MAX_ORDER_PAGE_SIZE;
+    return Math.min(
+      ApiClient.MAX_ORDER_PAGE_SIZE,
+      Math.max(1, Math.floor(size))
+    );
+  }
+
+  private static normalizePaging(raw: unknown): CursorPaging {
+    const paging = (raw ?? {}) as Record<string, unknown>;
+    const next =
+      typeof paging.next_cursor === 'string' ? paging.next_cursor.trim() : '';
+    const prev =
+      typeof paging.prev_cursor === 'string' ? paging.prev_cursor.trim() : '';
+
+    return {
+      next_cursor: next.length > 0 ? next : null,
+      prev_cursor: prev.length > 0 ? prev : null,
+      has_more: Boolean(paging.has_more),
+    };
   }
 
   /**
@@ -1636,6 +1837,33 @@ export class ApiClient {
   }
 
   // ===== Helper Methods =====
+
+  /**
+   * Build flat query parameters for order-list endpoints.
+   *
+   * Date aliases are normalized and unsupported numeric-page keys are omitted
+   * so callers advance only with the response cursor.
+   */
+  private buildOrderQueryParams(
+    filters?: OrderFilters | Record<string, unknown> | null
+  ): Record<string, unknown> {
+    if (!filters) return {};
+
+    const keyAliases: Record<string, string> = {
+      from_date: 'start_datetime',
+      to_date: 'end_datetime',
+    };
+    const params: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(filters as Record<string, unknown>)) {
+      if (value === undefined || value === null) continue;
+      if (key === 'page' || key === 'page_size' || key === 'pageSize') continue;
+
+      params[keyAliases[key] ?? key] = value;
+    }
+
+    return params;
+  }
 
   /**
    * Build filter parameters from object
