@@ -239,7 +239,7 @@ export const consumptionAccounts = [
     user_id: 'user-001',
     instrument_id: 'compute',
     status: 'active',
-    available_balance: 5000000,
+    uncommitted_balance: 5000000,
     committed_balance: 0,
     total_balance: 5000000,
     total_deposits: 5000000,
