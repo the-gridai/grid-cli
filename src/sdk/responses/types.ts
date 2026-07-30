@@ -1,9 +1,9 @@
 /**
  * Open Responses API Types
- * 
+ *
  * Based on the Open Responses specification (https://www.openresponses.org/)
  * for multi-provider, interoperable LLM interfaces.
- * 
+ *
  * Key concepts:
  * - Items: atomic unit of model output and tool use
  * - Streaming events: real-time output
@@ -18,7 +18,7 @@
  * Model available for inference
  */
 export interface Model {
-  id: string;           // e.g., "llama-3.1-70b"
+  id: string; // e.g., "llama-3.1-70b"
   display_name: string; // e.g., "Llama 3.1 70B"
   object: 'model';
 }
@@ -89,12 +89,7 @@ export interface AudioItem {
 /**
  * Union of all item types
  */
-export type Item = 
-  | MessageItem
-  | ToolCallItem
-  | ToolResultItem
-  | ImageItem
-  | AudioItem;
+export type Item = MessageItem | ToolCallItem | ToolResultItem | ImageItem | AudioItem;
 
 /**
  * Item delta for streaming
@@ -186,6 +181,128 @@ export interface Response {
   status: ResponseStatus;
   required_action?: RequiredAction;
   error?: ErrorInfo;
+  /**
+   * Server-issued Grid request id (`x-grid-request-id` header from dispatch).
+   * The handle for `GET /v1/usage/:request_id` — tokens, settled cost, timing.
+   */
+  request_id?: string;
+}
+
+// =============================================================================
+// Usage receipts (spend transparency)
+// =============================================================================
+
+/** Cost lifecycle on a receipt. Settles asynchronously after the response. */
+export type UsageCostStatus = 'pending' | 'reconciled' | 'unpriced' | 'cancelled';
+
+/** One FIFO draw from an acquisition lot; cost == sum of subtotals. */
+export interface UsageCostDraw {
+  acquisition_price_per_token: string | null;
+  tokens: number;
+  subtotal: string | null;
+}
+
+/** Agent-consumable cost object: money is decimal strings, never floats. */
+export interface UsageCost {
+  amount: string | null;
+  currency: string;
+  status: UsageCostStatus;
+  effective_price_per_token: string | null;
+  metering_policy_version: string | null;
+  reconciled_at: string | null;
+  /** Present on single-receipt lookups; omitted from list entries. */
+  breakdown?: UsageCostDraw[];
+}
+
+/** Per-request usage receipt (`GET /v1/usage/:request_id`). */
+export interface UsageReceipt {
+  request_id: string;
+  status: 'pending' | 'reconciled' | 'error';
+  requested_model: string | null;
+  serving_model: string | null;
+  endpoint: string | null;
+  /** API key that made the request; null on rows that predate attribution. */
+  api_key_id: string | null;
+  created_at: string;
+  usage: {
+    input_tokens: number | null;
+    output_tokens: number | null;
+    total_tokens: number | null;
+  };
+  cost: UsageCost;
+  timing: {
+    ttft_ms: number | null;
+    tokens_per_second: number | null;
+    duration_ms: number | null;
+  };
+}
+
+/** Paginated usage list (`GET /v1/usage`), Trading API paging conventions. */
+export interface UsageListResponse {
+  data: UsageReceipt[];
+  paging: {
+    next_cursor: string | null;
+    prev_cursor: string | null;
+    has_more: boolean;
+  };
+}
+
+/** Filters for the usage list endpoint. */
+export interface ListUsageParams {
+  from?: string;
+  to?: string;
+  status?: 'pending' | 'reconciled' | 'error';
+  cost_status?: UsageCostStatus;
+  model?: string;
+  api_key_id?: string;
+  order_by?: 'inserted_at' | 'total_tokens';
+  order_direction?: 'asc' | 'desc';
+  limit?: number;
+  /** Opaque cursor from `paging.next_cursor` (forward pagination). */
+  next?: string;
+  /** Opaque cursor from `paging.prev_cursor` (backward pagination). */
+  prev?: string;
+}
+
+/** One set of usage/spend aggregates (totals or a single bucket). */
+export interface UsageSummaryAggregates {
+  request_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost: {
+    /** Decimal string; sum of the priced portion. Null when nothing priced. */
+    reconciled_amount: string | null;
+    currency: string;
+    reconciled_requests: number;
+    pending_requests: number;
+    unpriced_requests: number;
+    cancelled_requests: number;
+    /** Tokens without a known cost basis; never converted to dollars. */
+    unpriced_tokens: number;
+  };
+}
+
+/** Aggregated usage/spend (`GET /v1/usage/summary`). */
+export interface UsageSummaryResponse {
+  totals: UsageSummaryAggregates;
+  group_by: 'day' | 'model' | 'api_key' | null;
+  /** Start of the applied window (defaults to 30 days before `to`). */
+  from: string;
+  /** End of the applied window (defaults to now). */
+  to: string;
+  /** Present only when group_by was requested; at most 100 entries. */
+  buckets?: Array<UsageSummaryAggregates & { key: string | null }>;
+}
+
+/** Params for the usage summary endpoint. */
+export interface UsageSummaryParams {
+  /** Window start; defaults to 30 days before `to`. Max span: 31 days. */
+  from?: string;
+  /** Window end; defaults to now. */
+  to?: string;
+  group_by?: 'day' | 'model' | 'api_key';
+  api_key_id?: string;
 }
 
 // =============================================================================

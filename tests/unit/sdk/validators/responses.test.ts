@@ -402,26 +402,62 @@ describe('TradingAccountSchema', () => {
 });
 
 describe('ConsumptionInstrumentSchema', () => {
-  it('should validate complete consumption instrument', () => {
+  const canonicalInstrument = {
+    account_id: 'acc_123',
+    user_id: 'user_456',
+    instrument_id: 'instr_123',
+    status: 'active',
+    uncommitted_balance: 5000,
+    committed_balance: 2500,
+    total_balance: 7500,
+    total_deposits: 10000,
+    total_withdrawals: 2500,
+    total_commitments: 0,
+    total_transfers_in: 0,
+    total_transfers_out: 0,
+    created_at: '2025-01-01T00:00:00Z',
+    updated_at: '2025-01-01T00:00:00Z'
+  };
+
+  it('validates the canonical numeric wire shape', () => {
+    const result = ConsumptionInstrumentSchema.parse(canonicalInstrument);
+
+    expect(result).toEqual(canonicalInstrument);
+    expect(result.uncommitted_balance).toBe(5000);
+  });
+
+  it('validates a closed GX account with numeric balances', () => {
     const instrument = {
-      account_id: 'acc_123',
-      user_id: 'user_456',
-      instrument_id: 'instr_123',
-      status: 'active',
-      available_balance: '5000',
-      committed_balance: '2500',
-      total_balance: '7500',
-      total_deposits: '10000',
-      total_withdrawals: '2500',
-      total_commitments: '0',
-      total_transfers_in: '0',
-      total_transfers_out: '0',
-      created_at: '2025-01-01T00:00:00Z',
-      updated_at: '2025-01-01T00:00:00Z'
+      ...canonicalInstrument,
+      status: 'closed',
+      uncommitted_balance: 2,
+      committed_balance: 0,
+      total_balance: 2,
+      total_deposits: 2,
+      total_withdrawals: 0,
     };
 
     const result = ConsumptionInstrumentSchema.parse(instrument);
     expect(result).toEqual(instrument);
+  });
+
+  it('rejects the stale available_balance field', () => {
+    const instrument: Record<string, unknown> = {
+      ...canonicalInstrument,
+      available_balance: 5000,
+    };
+    delete instrument.uncommitted_balance;
+
+    expect(() => ConsumptionInstrumentSchema.parse(instrument)).toThrow(ZodError);
+  });
+
+  it('rejects string consumption balances', () => {
+    expect(() =>
+      ConsumptionInstrumentSchema.parse({
+        ...canonicalInstrument,
+        uncommitted_balance: '5000',
+      })
+    ).toThrow(ZodError);
   });
 });
 

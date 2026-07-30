@@ -38,7 +38,7 @@ export const ConsumptionBalanceView: React.FC<ConsumptionBalanceViewProps> = ({
   }
 
   const totalAvailable = instruments.reduce(
-    (sum, i) => sum + parseFloat(String(i.available_balance || '0')),
+    (sum, instrument) => sum + instrument.uncommitted_balance,
     0
   );
 
@@ -53,8 +53,8 @@ export const ConsumptionBalanceView: React.FC<ConsumptionBalanceViewProps> = ({
       <Table
         data={instruments.map(i => ({
           spec: i.instrument_id || 'Unknown',
-          available: i.available_balance?.toLocaleString() || '0',
-          total: i.total_balance?.toLocaleString() || '0',
+          available: i.uncommitted_balance.toLocaleString(),
+          total: i.total_balance.toLocaleString(),
         }))}
         columns={[
           { header: 'SPEC', accessor: 'spec', width: 25 },

@@ -1,15 +1,13 @@
 /**
  * Tests for ResponsesClient
- * 
+ *
  * Tests Open Responses spec compliance, Bearer auth, redirect handling, and streaming.
  */
 
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
+import { Readable } from 'stream';
 import { ResponsesClient } from '../../../../src/sdk/responses/client';
-import type {
-  Model,
-  CreateResponseRequest,
-} from '../../../../src/sdk/responses/types';
+import type { Model } from '../../../../src/sdk/responses/types';
 
 // Create mock axios instance
 const mockAxiosInstance = {
@@ -151,10 +149,12 @@ describe('ResponsesClient', () => {
         status: 200,
         data: {
           id: 'chatcmpl-123',
-          choices: [{
-            message: { role: 'assistant', content: 'Hello!' },
-            finish_reason: 'stop',
-          }],
+          choices: [
+            {
+              message: { role: 'assistant', content: 'Hello!' },
+              finish_reason: 'stop',
+            },
+          ],
           usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
         },
       });
@@ -169,9 +169,7 @@ describe('ResponsesClient', () => {
         '/chat/completions',
         expect.objectContaining({
           model: 'fast-inference',
-          messages: expect.arrayContaining([
-            expect.objectContaining({ role: 'user', content: 'Hello' }),
-          ]),
+          messages: expect.arrayContaining([expect.objectContaining({ role: 'user', content: 'Hello' })]),
           stream: false,
         })
       );
@@ -187,15 +185,18 @@ describe('ResponsesClient', () => {
       });
 
       // Mock axios.post for the redirect (not the instance method)
-      const axiosModule = require('axios');
-      axiosModule.post.mockResolvedValueOnce({
+      const axiosPost = axios.post as jest.Mock;
+      axiosPost.mockResolvedValueOnce({
         data: {
           id: 'chatcmpl-123',
-          choices: [{
-            message: { role: 'assistant', content: 'Hello from the gateway!' },
-            finish_reason: 'stop',
-          }],
+          choices: [
+            {
+              message: { role: 'assistant', content: 'Hello from the gateway!' },
+              finish_reason: 'stop',
+            },
+          ],
         },
+        headers: {},
       });
 
       const client = ResponsesClient.getInstance();
@@ -204,13 +205,41 @@ describe('ResponsesClient', () => {
         input: 'Hello',
       });
 
-      // Verify redirect was followed
-      expect(axiosModule.post).toHaveBeenCalledWith(
-        expect.stringContaining('localhost:4001'), // URL rewritten
+      // Verify redirect was followed and the local-development hostname was rewritten.
+      expect(axiosPost).toHaveBeenCalledWith(
+        expect.stringContaining('localhost:4001'),
         expect.any(Object),
         expect.any(Object)
       );
       expect(response.items[0]).toHaveProperty('content', 'Hello from the gateway!');
+    });
+
+    it('should not reuse a request id when the next response omits the header', async () => {
+      mockAxiosInstance.post
+        .mockResolvedValueOnce({
+          status: 200,
+          headers: { 'x-grid-request-id': 'request-one' },
+          data: {
+            id: 'chatcmpl-1',
+            choices: [{ message: { role: 'assistant', content: 'One' }, finish_reason: 'stop' }],
+          },
+        })
+        .mockResolvedValueOnce({
+          status: 200,
+          headers: {},
+          data: {
+            id: 'chatcmpl-2',
+            choices: [{ message: { role: 'assistant', content: 'Two' }, finish_reason: 'stop' }],
+          },
+        });
+
+      const client = ResponsesClient.getInstance();
+      const first = await client.create({ model: 'fast-inference', input: 'One' });
+      const second = await client.create({ model: 'fast-inference', input: 'Two' });
+
+      expect(first.request_id).toBe('request-one');
+      expect(second.request_id).toBeUndefined();
+      expect(client.getLastRequestId()).toBeUndefined();
     });
 
     it('should throw error when redirect missing location header', async () => {
@@ -220,10 +249,12 @@ describe('ResponsesClient', () => {
       });
 
       const client = ResponsesClient.getInstance();
-      await expect(client.create({
-        model: 'fast-inference',
-        input: 'Hello',
-      })).rejects.toThrow('Missing redirect location');
+      await expect(
+        client.create({
+          model: 'fast-inference',
+          input: 'Hello',
+        })
+      ).rejects.toThrow('Missing redirect location');
     });
 
     it('should convert instructions to system message', async () => {
@@ -245,9 +276,7 @@ describe('ResponsesClient', () => {
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
         '/chat/completions',
         expect.objectContaining({
-          messages: expect.arrayContaining([
-            expect.objectContaining({ role: 'system', content: 'You are a pirate' }),
-          ]),
+          messages: expect.arrayContaining([expect.objectContaining({ role: 'system', content: 'You are a pirate' })]),
         })
       );
     });
@@ -393,5 +422,35 @@ describe('stream', () => {
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe('error');
     expect(events[0].error.message).toContain('Connection failed');
+  });
+
+  it('captures the request id from the final streaming response without sending bearer auth', async () => {
+    mockAxiosInstance.post.mockResolvedValueOnce({
+      status: 307,
+      headers: { location: 'https://gateway.example.com/v1/chat/completions?token=abc' },
+    });
+
+    const axiosPost = axios.post as jest.Mock;
+    axiosPost.mockResolvedValueOnce({
+      data: Readable.from(['data: {"choices":[]}\n', 'data: [DONE]\n']),
+      headers: { 'x-grid-request-id': 'stream-request' },
+    });
+
+    const client = ResponsesClient.getInstance();
+    const events: any[] = [];
+
+    for await (const event of client.stream({ model: 'test', input: 'Hello' })) {
+      events.push(event);
+    }
+
+    expect(events[events.length - 1].response.request_id).toBe('stream-request');
+    expect(client.getLastRequestId()).toBe('stream-request');
+    expect(axiosPost).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Object),
+      expect.objectContaining({
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
   });
 });

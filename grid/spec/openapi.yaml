@@ -1042,7 +1042,7 @@ components:
         - user_id
         - instrument_id
         - status
-        - available_balance
+        - uncommitted_balance
         - committed_balance
         - total_balance
       properties:
@@ -1054,7 +1054,7 @@ components:
           type: string
         status:
           type: string
-        available_balance:
+        uncommitted_balance:
           type: number
         committed_balance:
           type: number

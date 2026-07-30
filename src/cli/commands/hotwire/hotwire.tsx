@@ -230,6 +230,9 @@ async function runPrintMode(client: ResponsesClient, opts: PrintModeOpts, retrie
             const ttftStr = ttft > 0 ? `${ttft}ms ttft │ ` : '';
             console.log(`\x1b[38;5;245m─── ${ttftStr}${usage.completion_tokens} tokens │ ${(usage.completion_tokens / elapsed).toFixed(1)} tok/s │ ${elapsed.toFixed(1)}s ───\x1b[0m`);
           }
+          if (event.response.request_id) {
+            console.log(`\x1b[38;5;245m─── receipt: grid consumption usage ${event.response.request_id} ───\x1b[0m`);
+          }
           
           if (opts.saveFile) {
             saveSession(opts.saveFile, {
@@ -260,7 +263,11 @@ async function runPrintMode(client: ResponsesClient, opts: PrintModeOpts, retrie
           console.log(item.content);
         }
       }
-      
+
+      if (response.request_id) {
+        console.log(`\x1b[38;5;245m─── receipt: grid consumption usage ${response.request_id} ───\x1b[0m`);
+      }
+
       if (opts.saveFile) {
         saveSession(opts.saveFile, {
           id: response.id,
