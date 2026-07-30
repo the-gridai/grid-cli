@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Spend-transparency receipts** are available through `grid consumption usage`: look up one request, page and filter recent usage, or aggregate spend by day, model, or API key. Streaming and non-streaming `grid hotwire` responses now print the server-issued receipt ID ([#59](https://github.com/the-gridai/grid-cli/pull/59)).
 - **Cursor-aware order listing in the SDK** adds `listOrdersPage`, `listAllOrders`, `listOrdersRawPage`, and `listAllOrdersRaw`, including duplicate protection and explicit truncation reasons when a complete result cannot be guaranteed ([#60](https://github.com/the-gridai/grid-cli/pull/60)).
 
+### Changed
+
+- Updated Axios, `ws`, OpenTelemetry, Sentry, and affected transitive dependencies so the CLI and standalone SDK have no critical or high-severity production audit findings.
+
 ### Fixed
 
 - **Interactive TUI no longer attempts raw-mode terminal calls in non-TTY environments** (pipes, CI, scripts). `grid` without a subcommand now checks stdin, stdout, and raw-mode support and prints the specific problem plus non-interactive alternatives instead of crashing with a `tcsetattr`-style error ([#47](https://github.com/the-gridai/grid-cli/pull/47)).
