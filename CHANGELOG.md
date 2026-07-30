@@ -7,16 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-30
+
 ### Added
 
-- **`grid account limits --market-id <id>`** shows the effective order rate limit for your user on a market via the new Trading API `GET /v1/account/limits` endpoint. Also exposed as `ApiClient.getAccountLimits(marketId)` in the SDK.
-- **Spend-transparency receipts** are available through `grid consumption usage`: look up one request, page and filter recent usage, or aggregate spend by day, model, or API key. Streaming and non-streaming `grid hotwire` responses now print the server-issued receipt ID.
-- **Cursor-aware order listing in the SDK** adds `listOrdersPage`, `listAllOrders`, `listOrdersRawPage`, and `listAllOrdersRaw`, including duplicate protection and explicit truncation reasons when a complete result cannot be guaranteed.
+- **`grid account limits --market-id <id>`** shows the effective order rate limit for your user on a market via the new Trading API `GET /v1/account/limits` endpoint. Also exposed as `ApiClient.getAccountLimits(marketId)` in the SDK ([#47](https://github.com/the-gridai/grid-cli/pull/47)).
+- **Spend-transparency receipts** are available through `grid consumption usage`: look up one request, page and filter recent usage, or aggregate spend by day, model, or API key. Streaming and non-streaming `grid hotwire` responses now print the server-issued receipt ID ([#59](https://github.com/the-gridai/grid-cli/pull/59)).
+- **Cursor-aware order listing in the SDK** adds `listOrdersPage`, `listAllOrders`, `listOrdersRawPage`, and `listAllOrdersRaw`, including duplicate protection and explicit truncation reasons when a complete result cannot be guaranteed ([#60](https://github.com/the-gridai/grid-cli/pull/60)).
 
 ### Fixed
 
-- **Interactive TUI no longer attempts raw-mode terminal calls in non-TTY environments** (pipes, CI, scripts). `grid` without a subcommand now checks stdin, stdout, and raw-mode support and prints the specific problem plus non-interactive alternatives instead of crashing with a `tcsetattr`-style error.
-- **Consumption response contracts match the deployed API** by using numeric `uncommitted_balance` fields, and inference redirects no longer send an unrelated gateway bearer token or reuse a stale request ID.
+- **Interactive TUI no longer attempts raw-mode terminal calls in non-TTY environments** (pipes, CI, scripts). `grid` without a subcommand now checks stdin, stdout, and raw-mode support and prints the specific problem plus non-interactive alternatives instead of crashing with a `tcsetattr`-style error ([#47](https://github.com/the-gridai/grid-cli/pull/47)).
+- **Consumption response contracts match the deployed API** by using numeric `uncommitted_balance` fields, and inference redirects no longer send an unrelated gateway bearer token or reuse a stale request ID ([#59](https://github.com/the-gridai/grid-cli/pull/59)).
 
 ## [0.11.1] - 2026-07-06
 
