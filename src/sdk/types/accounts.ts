@@ -129,7 +129,7 @@ export interface ConsumptionInstrument {
   last_withdrawal_at?: string | null;
   last_commitment_at?: string | null;
   last_transfer_at?: string | null;
-  created_at: string;
+  created_at: string | null;
   updated_at: string;
 }
 
