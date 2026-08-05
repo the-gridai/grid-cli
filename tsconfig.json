@@ -11,7 +11,11 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "moduleResolution": "bundler",
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@grid/*": ["src/*"]
+    }
   },
   "include": ["src/**/*", "bin/**/*", "tests/**/*", "strategies/**/*"],
   "exclude": [

@@ -24,7 +24,7 @@ while [ -L "$SOURCE" ]; do
   [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
 done
 DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
-exec node --require "$DIR/../dist/src/instrumentation.cjs" "$DIR/../dist/src/cli/index.js" "$@"
+exec node --require "$DIR/../dist/src/instrumentation.cjs" "$DIR/../dist/src/cli/main.js" "$@"
 `;
 
 fs.writeFileSync(path.join(__dirname, '..', 'bin', 'grid'), shim);
