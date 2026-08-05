@@ -231,7 +231,7 @@ error. The common causes are a 403 because the value is mode-managed, and a 403
 because the account is not yet email-verified or has not accepted legal terms —
 settings mutations require both.
 
-**Account mode vs. other "advanced" features:** `grid account settings mode --advanced` controls Exchange account automation. It is unrelated to strategy-dashboard "Advanced Config" or HOTWIRE `--auto-fund`.
+**Account mode vs. other "advanced" features:** `grid account settings mode --advanced` controls Exchange account automation. It is unrelated to HOTWIRE `--auto-fund` or to any "advanced config" toggle elsewhere in the product.
 
 See [CLI Reference — account](./cli-reference.md#grid-account--account-settings).
 
