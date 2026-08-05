@@ -590,7 +590,7 @@ export class ApiClient {
     return withRetry(async () => {
       const response = await this.rateLimiter.execute(() =>
         this.client.get<ApiResponse<Order[]>>('/orders', {
-          params: this.buildOrderQueryParams(filters),
+          params: this.buildQueryParams(filters),
         })
       );
 
@@ -637,7 +637,7 @@ export class ApiClient {
     filters?: Record<string, string>
   ): Promise<PaginatedResult<any>> {
     return withRetry(async () => {
-      const params = this.buildOrderQueryParams(filters);
+      const params = this.buildQueryParams(filters);
       const response = await this.rateLimiter.execute(() =>
         this.client.get<any>('/orders', { params })
       );
@@ -1479,8 +1479,13 @@ export class ApiClient {
 
   /**
    * Get supplier liability
-   * 
-   * @param filters - Optional filters
+   *
+   * NOTE: unlike the other list endpoints, this one takes no query parameters
+   * server-side — it always returns the caller's own liability up to a fixed
+   * cap. `filters` is still serialised and sent for consistency, but the server
+   * discards it, so callers must not rely on it narrowing the result set.
+   *
+   * @param filters - Optional filters (currently ignored by the server)
    * @returns Promise resolving to array of liabilities
    */
   public async getSupplierLiability(filters?: any): Promise<any[]> {
@@ -1839,12 +1844,16 @@ export class ApiClient {
   // ===== Helper Methods =====
 
   /**
-   * Build flat query parameters for order-list endpoints.
+   * Build flat query parameters for list endpoints.
+   *
+   * The API accepts top-level keys (`market_id`, `status`, `limit`, `next`, …).
+   * Nested `flop[filters][...]` is ignored once an endpoint declares
+   * `allowed_filterable`, so filters must be sent flat to have any effect.
    *
    * Date aliases are normalized and unsupported numeric-page keys are omitted
    * so callers advance only with the response cursor.
    */
-  private buildOrderQueryParams(
+  private buildQueryParams(
     filters?: OrderFilters | Record<string, unknown> | null
   ): Record<string, unknown> {
     if (!filters) return {};
@@ -1865,25 +1874,9 @@ export class ApiClient {
     return params;
   }
 
-  /**
-   * Build filter parameters from object
-   */
+  /** @deprecated Use {@link buildQueryParams}. Kept as an alias for any external forks. */
   private buildFilters(filters?: any): any {
-    if (!filters) return {};
-    
-    const params: any = {};
-    let filterIndex = 0;
-    
-    for (const [key, value] of Object.entries(filters)) {
-      if (value !== undefined && value !== null) {
-        // The exchange API uses Phoenix Flop for filtering - params must be nested under 'flop'
-        params[`flop[filters][${filterIndex}][field]`] = key;
-        params[`flop[filters][${filterIndex}][value]`] = value;
-        filterIndex++;
-      }
-    }
-    
-    return params;
+    return this.buildQueryParams(filters);
   }
 
   // Session-auth user management methods removed — they require cookie/session
