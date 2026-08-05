@@ -83,7 +83,9 @@ export class ResponsesClient {
     const oauth = oauthSessionFromConfig(config);
 
     // Consumption API keys take precedence over OAuth on the consumption host.
-    if (oauth && !config.API_KEY) {
+    // GRID_CLI_CONSUMPTION_KEY counts as one: without it here, an OAuth session
+    // would discard the key and authenticate with a token the host rejects.
+    if (oauth && !config.API_KEY && !config.GRID_CLI_CONSUMPTION_KEY) {
       this.oauthSession = new OAuthSession(oauth, this.profileName);
       this.staticBearer = undefined;
     } else {
