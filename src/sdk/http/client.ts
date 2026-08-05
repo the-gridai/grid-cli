@@ -1479,8 +1479,13 @@ export class ApiClient {
 
   /**
    * Get supplier liability
-   * 
-   * @param filters - Optional filters
+   *
+   * NOTE: unlike the other list endpoints, this one takes no query parameters
+   * server-side — it always returns the caller's own liability up to a fixed
+   * cap. `filters` is still serialised and sent for consistency, but the server
+   * discards it, so callers must not rely on it narrowing the result set.
+   *
+   * @param filters - Optional filters (currently ignored by the server)
    * @returns Promise resolving to array of liabilities
    */
   public async getSupplierLiability(filters?: any): Promise<any[]> {
