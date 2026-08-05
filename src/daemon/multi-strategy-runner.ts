@@ -9,6 +9,8 @@
  */
 
 import http from 'http';
+import v8 from 'v8';
+import path from 'path';
 import { logger } from '../core/logging/logger';
 import {
   initSentry,
@@ -221,6 +223,9 @@ export class MultiStrategyRunner {
 
     // Setup graceful shutdown handlers
     this.setupShutdownHandlers();
+
+    // Start periodic memory diagnostics on stdout for leak classification.
+    this.startMemoryDiagnostics();
   }
 
   private orderStrategiesForStartup(enabledStrategies: StrategyInstanceConfig[]): StrategyInstanceConfig[] {
@@ -641,6 +646,64 @@ export class MultiStrategyRunner {
   }
 
   private shutdownHandlersRegistered = false;
+  private memDiagHandle: NodeJS.Timeout | null = null;
+
+  /**
+   * Periodically log a memory breakdown to stdout so a leak can be classified
+   * without a heap snapshot or shell access to the host:
+   *  - old_space / heapUsed growing  → JS object retention
+   *  - external / arrayBuffers growing → native buffers (ws/http/sqlite)
+   *  - activeHandles / activeRequests growing → leaked timers/sockets
+   *  - detachedContexts growing → leaked closures/contexts
+   * Search collected logs for `[mem-diag]`. Disable with GRID_MEM_DIAG=false.
+   *
+   * NOTE: this deliberately uses console.log, NOT the winston `logger`. On a
+   * long-running daemon winston's Console transport reliably ships stdout only
+   * during early startup and then goes silent in steady state, while plain
+   * console.log keeps reaching the collector. Diagnostics that fire every 60s in
+   * steady state MUST use console.log or they never reach log aggregation.
+   * The payload is emitted as `[mem-diag] process memory { ...json }` so it stays
+   * greppable and JSON-parseable (slice from the first `{`).
+   */
+  private startMemoryDiagnostics(): void {
+    if (process.env.GRID_MEM_DIAG === 'false') return;
+    const intervalMs = Number(process.env.GRID_MEM_DIAG_INTERVAL_MS ?? '60000');
+    const mb = (b: number) => Math.round(b / 1048576);
+    const log = () => {
+      try {
+        const m = process.memoryUsage();
+        const h = v8.getHeapStatistics() as v8.HeapInfo & {
+          number_of_native_contexts?: number;
+          number_of_detached_contexts?: number;
+        };
+        const oldSpace = v8.getHeapSpaceStatistics().find((s) => s.space_name === 'old_space');
+        const proc = process as unknown as {
+          _getActiveHandles?: () => unknown[];
+          _getActiveRequests?: () => unknown[];
+        };
+        console.log(
+          '[mem-diag] process memory ' +
+            JSON.stringify({
+              rssMB: mb(m.rss),
+              heapUsedMB: mb(m.heapUsed),
+              heapTotalMB: mb(m.heapTotal),
+              externalMB: mb(m.external),
+              arrayBuffersMB: mb(m.arrayBuffers),
+              oldSpaceUsedMB: oldSpace ? mb(oldSpace.space_used_size) : -1,
+              detachedContexts: h.number_of_detached_contexts ?? -1,
+              nativeContexts: h.number_of_native_contexts ?? -1,
+              activeHandles: proc._getActiveHandles?.().length ?? -1,
+              activeRequests: proc._getActiveRequests?.().length ?? -1,
+            })
+        );
+      } catch (err) {
+        console.error('[mem-diag] failed: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    };
+    log();
+    this.memDiagHandle = setInterval(log, intervalMs);
+    this.memDiagHandle.unref?.();
+  }
 
   /**
    * Setup graceful shutdown signal handlers (idempotent)
@@ -660,5 +723,26 @@ export class MultiStrategyRunner {
 
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
+
+    // On-demand heap snapshot for leak diagnosis: send SIGUSR2 to the process.
+    // Writes a .heapsnapshot to GRID_HEAPSNAPSHOT_DIR (default /tmp). Capture two
+    // ~30min apart under load and diff them in Chrome DevTools to name the leaker.
+    // Note: writeHeapSnapshot is synchronous and briefly blocks the event loop.
+    // console.log (not winston): this fires in steady state, where winston output
+    // does not reach log aggregation. See startMemoryDiagnostics() note.
+    process.on('SIGUSR2', () => {
+      try {
+        const dir = process.env.GRID_HEAPSNAPSHOT_DIR || '/tmp';
+        const file = path.join(dir, `grid-heap-${Date.now()}.heapsnapshot`);
+        console.log('[mem-diag] writing heap snapshot (SIGUSR2) ' + JSON.stringify({ file }));
+        v8.writeHeapSnapshot(file);
+        console.log('[mem-diag] heap snapshot written ' + JSON.stringify({ file }));
+      } catch (err) {
+        console.error(
+          '[mem-diag] failed to write heap snapshot: ' +
+            (err instanceof Error ? err.message : String(err))
+        );
+      }
+    });
   }
 }

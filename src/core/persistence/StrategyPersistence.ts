@@ -60,12 +60,23 @@ interface InsertableRecord {
  * - ipmm_orders, ipmm_fills, ipmm_position_snapshots, etc.
  * - sd_orders, sd_fills, sd_position_snapshots, etc.
  */
+/** Tables that accumulate one row per event and should be pruned by age. */
+const PRUNABLE_TABLES: PersistenceTable[] = [
+  'orders',
+  'fills',
+  'position_snapshots',
+  'pnl_snapshots',
+  'decisions',
+].filter((t): t is PersistenceTable => (PERSISTENCE_TABLES as readonly string[]).includes(t));
+
 export class StrategyPersistence implements PersistenceAdapter {
   private db: Database.Database | null = null;
   private readonly dbPath: string;
   private readonly prefix: string;
   private readonly enabled: boolean;
   private initialized = false;
+  private pruneHandle: NodeJS.Timeout | null = null;
+  private readonly retentionMs: number;
 
   constructor(options: StrategyPersistenceOptions) {
     this.dbPath = options.dbPath 
@@ -73,6 +84,14 @@ export class StrategyPersistence implements PersistenceAdapter {
       || DEFAULT_DB_PATH;
     this.prefix = options.strategyPrefix;
     this.enabled = options.enabled ?? true;
+
+    // Event tables (orders/fills/snapshots) are append-only and otherwise grow
+    // without bound on disk. Retain a rolling window; default 7 days, override
+    // via GRID_PERSISTENCE_RETENTION_DAYS (0 disables pruning).
+    const retentionDays = Number(process.env.GRID_PERSISTENCE_RETENTION_DAYS ?? '7');
+    this.retentionMs = Number.isFinite(retentionDays) && retentionDays > 0
+      ? retentionDays * 24 * 60 * 60 * 1000
+      : 0;
 
     // Validate prefix
     if (!/^[a-z][a-z0-9_]*$/i.test(this.prefix)) {
@@ -129,6 +148,47 @@ export class StrategyPersistence implements PersistenceAdapter {
       prefix: this.prefix,
       tables: PERSISTENCE_TABLES.map(t => this.tableName(t)),
     });
+
+    // Prune once at startup, then hourly, so append-only event tables stay bounded.
+    if (this.retentionMs > 0) {
+      this.pruneOldRecords();
+      this.pruneHandle = setInterval(() => this.pruneOldRecords(), 60 * 60 * 1000);
+      // Don't keep the process alive solely for pruning.
+      this.pruneHandle.unref?.();
+    }
+  }
+
+  /**
+   * Delete rows older than the retention window from append-only event tables,
+   * then checkpoint the WAL so freed pages are reclaimed on disk.
+   */
+  private pruneOldRecords(): void {
+    if (!this.enabled || !this.db || this.retentionMs <= 0) {
+      return;
+    }
+    const cutoff = Date.now() - this.retentionMs;
+    try {
+      let deleted = 0;
+      for (const table of PRUNABLE_TABLES) {
+        const stmt = this.db.prepare(
+          `DELETE FROM ${this.tableName(table)} WHERE ts < ?`
+        );
+        deleted += stmt.run(cutoff).changes;
+      }
+      if (deleted > 0) {
+        this.db.pragma('wal_checkpoint(TRUNCATE)');
+        logger.info('Persistence pruned old records', {
+          prefix: this.prefix,
+          deleted,
+          retentionMs: this.retentionMs,
+        });
+      }
+    } catch (error: any) {
+      logger.error('Failed to prune persistence records', {
+        prefix: this.prefix,
+        error: error.message,
+      });
+    }
   }
 
   /**
@@ -250,6 +310,10 @@ export class StrategyPersistence implements PersistenceAdapter {
   }
 
   async close(): Promise<void> {
+    if (this.pruneHandle) {
+      clearInterval(this.pruneHandle);
+      this.pruneHandle = null;
+    }
     if (this.db) {
       try {
         this.db.close();
