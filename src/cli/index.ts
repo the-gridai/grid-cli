@@ -1,16 +1,14 @@
-#!/usr/bin/env node
 /**
- * GRID CLI Entry Point
+ * GRID CLI library entry.
  *
- * OpenTelemetry instrumentation is handled by `src/instrumentation.ts`,
- * loaded via the Node.js `--import` flag in the bin/grid shim. By the time
- * this file runs, HTTP auto-instrumentation is already active and every
- * outgoing request automatically gets W3C traceparent propagation.
+ * Exports the command tree rather than running it, so an embedding overlay can
+ * import `buildProgram`/`run` and add its own commands. The process entry point
+ * is `./main`, which is what bin/grid invokes.
  *
  * This file uses ONLY `@opentelemetry/api` — no SDK imports.
  */
 import { Command } from 'commander';
-import { pathToFileURL } from 'url';
+import { registerExtraCommands } from './extra-commands';
 import { statusCommand } from './commands/system/status';
 import { startCommand } from './commands/system/start';
 import { orderCommand } from './commands/order';
@@ -91,9 +89,7 @@ export function buildProgram(extraCommands: Command[] = []): Command {
   program.addCommand(verifyCommand);
   program.addCommand(diagnosticsCommand);
 
-  for (const command of extraCommands) {
-    program.addCommand(command);
-  }
+  registerExtraCommands(program, extraCommands);
 
   program.on('command:*', () => {
     console.error('Invalid command: %s\nSee --help for a list of available commands.', program.args.join(' '));
@@ -135,20 +131,4 @@ export async function run(extraCommands: Command[] = []): Promise<void> {
   }
 
   await program.parseAsync(process.argv);
-}
-
-/**
- * Only auto-run when this module is the process entry point (this package's own
- * `bin/grid`). When imported by an embedding overlay, the overlay is
- * responsible for calling `run()` with any extra commands.
- */
-const invokedPath = process.argv[1];
-const isMainModule = !!invokedPath && import.meta.url === pathToFileURL(invokedPath).href;
-
-if (isMainModule) {
-  run().catch(async (err) => {
-    logger.error('Fatal Error:', { error: err });
-    console.error(chalk.red('Fatal Error:'), err);
-    process.exit(1);
-  });
 }
