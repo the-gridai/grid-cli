@@ -224,7 +224,7 @@ export class MultiStrategyRunner {
     // Setup graceful shutdown handlers
     this.setupShutdownHandlers();
 
-    // Start periodic memory diagnostics (→ Loki) for leak classification.
+    // Start periodic memory diagnostics on stdout for leak classification.
     this.startMemoryDiagnostics();
   }
 
@@ -649,19 +649,19 @@ export class MultiStrategyRunner {
   private memDiagHandle: NodeJS.Timeout | null = null;
 
   /**
-   * Periodically log a memory breakdown to stdout (→ Loki) so a leak can be
-   * classified WITHOUT a heap snapshot or kubectl:
+   * Periodically log a memory breakdown to stdout so a leak can be classified
+   * without a heap snapshot or shell access to the host:
    *  - old_space / heapUsed growing  → JS object retention
    *  - external / arrayBuffers growing → native buffers (ws/http/sqlite)
    *  - activeHandles / activeRequests growing → leaked timers/sockets
    *  - detachedContexts growing → leaked closures/contexts
-   * Grep Loki for `[mem-diag]`. Disable with GRID_MEM_DIAG=false.
+   * Search collected logs for `[mem-diag]`. Disable with GRID_MEM_DIAG=false.
    *
-   * NOTE: this deliberately uses console.log, NOT the winston `logger`. On these
-   * long-running daemon pods winston's Console transport reliably ships stdout
-   * only during early startup and then goes silent in steady state, while plain
-   * console.log keeps reaching the Kubelet → Loki. Diagnostics that fire every
-   * 60s in steady state MUST use console.log or they are invisible in Grafana.
+   * NOTE: this deliberately uses console.log, NOT the winston `logger`. On a
+   * long-running daemon winston's Console transport reliably ships stdout only
+   * during early startup and then goes silent in steady state, while plain
+   * console.log keeps reaching the collector. Diagnostics that fire every 60s in
+   * steady state MUST use console.log or they never reach log aggregation.
    * The payload is emitted as `[mem-diag] process memory { ...json }` so it stays
    * greppable and JSON-parseable (slice from the first `{`).
    */
@@ -724,12 +724,12 @@ export class MultiStrategyRunner {
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
 
-    // On-demand heap snapshot for leak diagnosis: `kubectl exec <pod> -- kill -USR2 1`.
+    // On-demand heap snapshot for leak diagnosis: send SIGUSR2 to the process.
     // Writes a .heapsnapshot to GRID_HEAPSNAPSHOT_DIR (default /tmp). Capture two
     // ~30min apart under load and diff them in Chrome DevTools to name the leaker.
     // Note: writeHeapSnapshot is synchronous and briefly blocks the event loop.
     // console.log (not winston): this fires in steady state, where winston output
-    // does not reach Loki on these pods. See startMemoryDiagnostics() note.
+    // does not reach log aggregation. See startMemoryDiagnostics() note.
     process.on('SIGUSR2', () => {
       try {
         const dir = process.env.GRID_HEAPSNAPSHOT_DIR || '/tmp';

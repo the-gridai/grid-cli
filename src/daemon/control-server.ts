@@ -398,8 +398,9 @@ export class ControlServer {
     }
 
     // On-demand memory breakdown for leak diagnosis, reachable over the control
-    // API (Tailscale) without kubectl. Poll a few times to compute a growth rate,
-    // or compare pools (heapUsed/old_space vs external/arrayBuffers vs handles).
+    // API so no shell access to the host is needed. Poll a few times to compute
+    // a growth rate, or compare pools (heapUsed/old_space vs
+    // external/arrayBuffers vs handles).
     if (path === '/debug/memory' && method === 'GET') {
       const mb = (b: number) => Math.round((b / 1048576) * 10) / 10;
       const m = process.memoryUsage();

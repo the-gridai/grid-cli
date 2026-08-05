@@ -12,8 +12,8 @@ export const logger = winston.createLogger({
   defaultMeta: { service: 'grid-cli' },
   transports: [
     // Size-capped + rotated so a long-running daemon can't grow these files
-    // without bound (the k8s pods ship stdout to Loki; these are just a local
-    // post-mortem tail). maxsize/maxFiles keep total on-disk usage bounded.
+    // without bound. In a deployed daemon stdout is what gets collected; these
+    // files are only a local post-mortem tail, so cap their on-disk usage.
     new winston.transports.File({
       filename: 'error.log',
       level: 'error',
