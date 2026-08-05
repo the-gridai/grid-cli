@@ -32,23 +32,26 @@ function SettingsShowView(): React.ReactElement {
       {settings && (
         <Box flexDirection="column" paddingX={2}>
           <Text>account_mode: <Text color={colors.primary}>{settings.account_mode}</Text></Text>
-          <Text>auto_transfer_enabled: {String(settings.auto_transfer_enabled)}</Text>
-          <Text>auto_top_up_enabled: {String(settings.auto_top_up_enabled)}</Text>
+          <Text>auto_transfer_enabled: {String(settings.auto_transfer_enabled)} <Text color={colors.textMuted}>(derived from account_mode)</Text></Text>
+          <Text>auto_buy_enabled: {String(settings.auto_buy_enabled ?? settings.auto_top_up_enabled)}</Text>
+          <Text>auto_buy_quantity: {settings.auto_buy_quantity ?? '— (default 1)'}</Text>
+          <Text>auto_buy_trigger_threshold: {settings.auto_buy_trigger_threshold ?? '— (default 1)'}</Text>
           <Text>auto_reload_enabled: {String(settings.auto_reload_enabled)}</Text>
           <Text>auto_reload_threshold_usd: {settings.auto_reload_threshold_usd ?? '—'}</Text>
           <Text>auto_reload_amount_usd: {settings.auto_reload_amount_usd ?? '—'}</Text>
           <Text>auto_reload_monthly_limit_usd: {settings.auto_reload_monthly_limit_usd ?? '—'}</Text>
+          {settings.mode_managed_fields && settings.mode_managed_fields.length > 0 && (
+            <Text color={colors.textMuted}>
+              mode_managed_fields: {settings.mode_managed_fields.join(', ')}
+            </Text>
+          )}
         </Box>
       )}
     </Box>
   );
 }
 
-function AutoTransferPatchApp({
-  attrs,
-}: {
-  attrs: { auto_transfer_enabled?: boolean; auto_transfer_override?: boolean | null };
-}): React.ReactElement {
+function AutoBuyPatchApp({ enabled }: { enabled: boolean }): React.ReactElement {
   const [status, setStatus] = useState<ActionStatus>('pending');
   const [error, setError] = useState<string | undefined>();
 
@@ -56,25 +59,25 @@ function AutoTransferPatchApp({
     (async () => {
       try {
         assertOAuthForExchangeKeys();
-        await ExchangeClient.getInstance().patchAutoTransfer(attrs);
+        await ExchangeClient.getInstance().patchAutoBuy(enabled);
         setStatus('success');
       } catch (e: any) {
         setError(e.message || String(e));
         setStatus('error');
       }
     })();
-  }, [attrs]);
+  }, [enabled]);
 
   if (status === 'pending') {
-    return <ActionFeedbackView status="pending" title="Update auto-transfer" message="Please wait…" />;
+    return <ActionFeedbackView status="pending" title="Update auto-buy" message="Please wait…" />;
   }
   if (status === 'error') {
-    return <ActionFeedbackView status="error" title="Update auto-transfer" error={error} />;
+    return <ActionFeedbackView status="error" title="Update auto-buy" error={error} />;
   }
   return (
     <ActionFeedbackView
       status="success"
-      title="Auto-transfer updated"
+      title="Auto-buy updated"
       message="Run `grid account settings` to view."
     />
   );
@@ -117,7 +120,7 @@ function SettingsActionApp({
   action,
 }: {
   title: string;
-  action: 'toggle-auto-top-up' | 'mode-easy' | 'mode-advanced';
+  action: 'mode-easy' | 'mode-advanced';
 }): React.ReactElement {
   const [status, setStatus] = useState<ActionStatus>('pending');
   const [error, setError] = useState<string | undefined>();
@@ -127,9 +130,7 @@ function SettingsActionApp({
       try {
         assertOAuthForExchangeKeys();
         const client = ExchangeClient.getInstance();
-        if (action === 'toggle-auto-top-up') {
-          await client.toggleAutoTopUp();
-        } else if (action === 'mode-easy') {
+        if (action === 'mode-easy') {
           await client.switchAccountMode('easy');
         } else if (action === 'mode-advanced') {
           await client.switchAccountMode('advanced');
@@ -182,34 +183,35 @@ settingsCommand
   });
 
 settingsCommand
-  .command('auto-top-up')
-  .description('Toggle auto top-up')
-  .action(async () => {
-    const { waitUntilExit } = render(
-      <SettingsActionApp title="Toggle auto top-up" action="toggle-auto-top-up" />,
-    );
+  .command('auto-buy')
+  .alias('auto-top-up')
+  .description('Enable or disable auto-buy (formerly auto top-up)')
+  .requiredOption('--enabled <bool>', 'auto_buy_enabled (true/false)', (v) => v === 'true')
+  .action(async (options: { enabled: boolean }) => {
+    const { waitUntilExit } = render(<AutoBuyPatchApp enabled={options.enabled} />);
     await waitUntilExit();
   });
 
 settingsCommand
   .command('auto-transfer')
-  .description('Patch auto-transfer override (advanced mode only to disable)')
-  .option('--enabled <bool>', 'auto_transfer_enabled (true/false)', (v) => v === 'true')
-  .option('--default', 'reset to system default (clears override)')
-  .action(async (options: { enabled?: boolean; default?: boolean }) => {
-    if (options.default && options.enabled !== undefined) {
-      throw new Error('Use only one of --default or --enabled');
-    }
-    if (!options.default && options.enabled === undefined) {
-      throw new Error('Specify --enabled <true|false> or --default');
-    }
-    const attrs: { auto_transfer_enabled?: boolean; auto_transfer_override?: boolean | null } =
-      options.default
-        ? { auto_transfer_override: null }
-        : { auto_transfer_enabled: options.enabled! };
-
-    const { waitUntilExit } = render(<AutoTransferPatchApp attrs={attrs} />);
-    await waitUntilExit();
+  .description('Removed — auto-transfer is derived from account mode')
+  // The old flags stay declared so existing scripts get the explanation below
+  // rather than a commander parse error.
+  .option('--enabled <bool>', '(removed)')
+  .option('--default', '(removed)')
+  .allowUnknownOption()
+  .allowExcessArguments()
+  .action(() => {
+    console.error(
+      'Auto-transfer is no longer an account setting.\n\n' +
+        '  Account-wide: it follows account mode — easy mode transfers buys to\n' +
+        '  consumption, advanced mode does not. Use:\n' +
+        '      grid account settings mode --easy\n' +
+        '      grid account settings mode --advanced\n\n' +
+        '  Per order (advanced mode): opt in on individual buys with\n' +
+        '      grid order create --auto-transfer ...\n',
+    );
+    process.exitCode = 1;
   });
 
 settingsCommand
