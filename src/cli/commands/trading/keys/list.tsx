@@ -19,9 +19,9 @@ function SigningKeysListView(): React.ReactElement {
         const keys = await ExchangeClient.getInstance().listSigningKeys();
         setRows(
           keys.map((k) => ({
-            id: k.id || k.key_id,
+            id: k.id,
             label: k.label,
-            fp: k.fingerprint,
+            fp: k.fingerprint_prefix,
           })),
         );
       } catch (e: any) {
@@ -45,7 +45,7 @@ function SigningKeysListView(): React.ReactElement {
         rows.map((row) => (
           <Box key={row.id} flexDirection="column" marginBottom={1}>
             <Text color={colors.primary} bold>{row.label}</Text>
-            <Text color={colors.textDim}>id={row.id}{row.fp ? ` fp=${row.fp.slice(0, 12)}…` : ''}</Text>
+            <Text color={colors.textDim}>id={row.id}{row.fp ? ` fp=${row.fp}…` : ''}</Text>
           </Box>
         ))
       )}

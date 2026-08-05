@@ -42,7 +42,8 @@ export const PlaceOrderRequestSchema = z.object({
   time_in_force: z.enum(['gtc', 'ioc', 'fok', 'day']).optional(),
   client_order_id: z.string().optional(),
   post_only: z.boolean().optional(),
-  reduce_only: z.boolean().optional()
+  reduce_only: z.boolean().optional(),
+  should_autotransfer: z.boolean().optional()
 }).refine(data => {
   // Limit orders require price
   if ((data.type === 'limit' || data.type === 'stop_limit') && !data.price) {
