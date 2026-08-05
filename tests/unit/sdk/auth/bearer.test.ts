@@ -31,4 +31,23 @@ describe('resolveConsumptionBearerToken', () => {
     } as Config);
     expect(token).toBe('consumption-key');
   });
+
+  it('prefers GRID_CLI_CONSUMPTION_KEY over an OAuth access token', () => {
+    const token = resolveConsumptionBearerToken({
+      ...base,
+      AUTH_TYPE: 'oauth',
+      ACCESS_TOKEN: 'oauth-token',
+      GRID_CLI_CONSUMPTION_KEY: 'consumption-key',
+    } as Config);
+    expect(token).toBe('consumption-key');
+  });
+
+  it('still uses the OAuth access token when no consumption key is configured', () => {
+    const token = resolveConsumptionBearerToken({
+      ...base,
+      AUTH_TYPE: 'oauth',
+      ACCESS_TOKEN: 'oauth-token',
+    } as Config);
+    expect(token).toBe('oauth-token');
+  });
 });
