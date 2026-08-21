@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`grid account limits --market-id <id>`** shows the effective order rate limit for your user on a market via the new Trading API `GET /v1/account/limits` endpoint. Also exposed as `ApiClient.getAccountLimits(marketId)` in the SDK.
 - **Spend-transparency receipts** are available through `grid consumption usage`: look up one request, page and filter recent usage, or aggregate spend by day, model, or API key. Streaming and non-streaming `grid hotwire` responses now print the server-issued receipt ID.
 - **Cursor-aware order listing in the SDK** adds `listOrdersPage`, `listAllOrders`, `listOrdersRawPage`, and `listAllOrdersRaw`, including duplicate protection and explicit truncation reasons when a complete result cannot be guaranteed.
+- **The SDK `Model` type covers the whole `/v1/models` response.** It previously declared only `id`, `display_name` and `object`, so `pricing`, `context_length`, `top_provider`, `architecture`, `supported_parameters`, `owned_by` and `created` were all invisible to typed callers — including the limits a client needs to size a request. Adds `ModelPricing`, `ModelTopProvider` and `ModelArchitecture`, plus the registry-facing fields the endpoint is gaining (`max_input_tokens`, `max_completion_tokens`, `tool_call`, `structured_output`, `attachments`, `release_date`, `last_updated`).
 
 ### Fixed
 

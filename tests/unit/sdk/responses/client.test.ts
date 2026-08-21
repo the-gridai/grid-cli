@@ -94,9 +94,16 @@ describe('ResponsesClient', () => {
 
   describe('listModels', () => {
     it('should return array of models', async () => {
+      // `pricing` is required by the endpoint's schema and is null whenever the
+      // price cache has nothing for the id, so both branches are represented.
       const mockModels: Model[] = [
-        { id: 'fast-inference', object: 'model', display_name: 'Fast Inference' },
-        { id: 'prime-inference', object: 'model', display_name: 'Prime Inference' },
+        {
+          id: 'fast-inference',
+          object: 'model',
+          display_name: 'Fast Inference',
+          pricing: { usd_per_1m_tokens: 1.25, prompt: 1.25e-6, completion: 1.25e-6 },
+        },
+        { id: 'prime-inference', object: 'model', display_name: 'Prime Inference', pricing: null },
       ];
       mockAxiosInstance.get.mockResolvedValueOnce({
         data: { data: mockModels },

@@ -15,12 +15,82 @@
 // =============================================================================
 
 /**
- * Model available for inference
+ * Per-token and per-1M-token prices for an instrument.
+ *
+ * `null` when no AI instrument maps this catalog id, before the first price
+ * refresh, or when a refresh could not reach its sources.
+ */
+export interface ModelPricing {
+  /** Platform price for the AI commodity market backing this instrument. */
+  usd_per_1m_tokens: number;
+  /** Per-token equivalent. Our price is uniform, so this equals `completion`. */
+  prompt?: number;
+  /** Per-token equivalent. Our price is uniform, so this equals `prompt`. */
+  completion?: number;
+}
+
+/**
+ * Limits as published in the OpenRouter-shaped `top_provider` block.
+ *
+ * These are pool floors across the models an instrument can route to, not one
+ * model's arithmetic, so `max_input_tokens + max_completion_tokens` may exceed
+ * `context_length`. Budget against `context_length` per request rather than
+ * summing the two.
+ */
+export interface ModelTopProvider {
+  context_length: number;
+  max_input_tokens: number;
+  max_completion_tokens: number;
+  is_moderated: boolean;
+}
+
+export interface ModelArchitecture {
+  modality: string;
+  input_modalities: string[];
+  output_modalities: string[];
+  tokenizer?: string;
+  instruct_type?: string | null;
+}
+
+/**
+ * Model available for inference.
+ *
+ * `GET /v1/models` returns the full catalog entry, so this covers considerably
+ * more than the OpenAI model object. Only `id`, `object` and `pricing` are
+ * guaranteed; the rest are present for every instrument in the published
+ * catalog but absent for any id that is not in it.
  */
 export interface Model {
-  id: string; // e.g., "llama-3.1-70b"
-  display_name: string; // e.g., "Llama 3.1 70B"
+  id: string; // e.g., "text-prime"
   object: 'model';
+  display_name?: string; // e.g., "Text Prime"
+  name?: string; // e.g., "The Grid: Text Prime"
+  canonical_slug?: string;
+  owned_by?: string;
+  /** Unix epoch seconds. */
+  created?: number;
+  description?: string;
+  pricing: ModelPricing | null;
+  context_length?: number;
+  top_provider?: ModelTopProvider;
+  architecture?: ModelArchitecture;
+  supported_parameters?: string[];
+  /** Flat mirrors of `top_provider`, for clients that read the models.dev shape. */
+  max_input_tokens?: number;
+  max_completion_tokens?: number;
+  /** Derived capability flags. */
+  tool_call?: boolean;
+  structured_output?: boolean;
+  attachments?: boolean;
+  /** ISO dates derived from the catalog's epochs. */
+  release_date?: string;
+  last_updated?: string;
+  /** Grid-specific metadata: tier, family, delivered-model mix, ratings. */
+  grid?: Record<string, unknown>;
+  knowledge_cutoff?: string | null;
+  expiration_date?: string | null;
+  per_request_limits?: Record<string, unknown> | null;
+  links?: Record<string, unknown>;
 }
 
 /**
