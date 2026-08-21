@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Interactive TUI no longer attempts raw-mode terminal calls in non-TTY environments** (pipes, CI, scripts). `grid` without a subcommand now checks stdin, stdout, and raw-mode support and prints the specific problem plus non-interactive alternatives instead of crashing with a `tcsetattr`-style error.
 - **Consumption response contracts match the deployed API** by using numeric `uncommitted_balance` fields, and inference redirects no longer send an unrelated gateway bearer token or reuse a stale request ID.
+- **Authentication failures now say why.** The consumption API answers a bad key with `{"errors": {"code": …, "detail": …}}` and no `message` key, so the SDK fell through to a bare `Authentication failed` and discarded the only text explaining whether the key, the URL or the scope was wrong. `errors.code` was also never read, which pushed `errors.detail` into the error's `code` field.
 
 ## [0.11.1] - 2026-07-06
 
