@@ -31,8 +31,14 @@ export class ApiError extends GridError {
 }
 
 export class AuthenticationError extends GridError {
-  constructor(message: string = 'Authentication failed') {
-    super(message, 'AUTH_FAILED');
+  /**
+   * `code` defaults to the generic `AUTH_FAILED` so existing callers are
+   * unaffected, but the consumption API sends a specific machine code on auth
+   * failures (`errors.code`, e.g. `invalid_api_key`) that a caller needs in
+   * order to branch — retry, re-auth, or surface a specific message.
+   */
+  constructor(message: string = 'Authentication failed', code: string = 'AUTH_FAILED') {
+    super(message, code);
     this.name = 'AuthenticationError';
     Object.setPrototypeOf(this, AuthenticationError.prototype);
   }

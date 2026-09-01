@@ -107,7 +107,9 @@ export function transformAxiosError(error: AxiosError): Error {
         : errorsCode && errorDetail
           ? errorDetail
           : 'Authentication failed';
-    return new AuthenticationError(message);
+    // Preserve the server's machine code so callers can branch on it; falls
+    // back to the class default when the response carries none.
+    return new AuthenticationError(message, errorsCode || errorData?.error?.code || 'AUTH_FAILED');
   }
 
   // Rate limiting (429)

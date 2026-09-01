@@ -155,6 +155,20 @@ describe('transformAxiosError', () => {
 
       expect(result).toBeInstanceOf(AuthenticationError);
       expect(result.message).toBe('The provided API key is not valid for this environment.');
+      // The machine code has to survive too, or a caller can read the reason
+      // but cannot branch on it.
+      expect((result as AuthenticationError).code).toBe('invalid_api_key');
+    });
+
+    it('should keep the generic auth code when the response carries none', () => {
+      const axiosError = {
+        response: { status: 401, data: {} },
+      } as unknown as AxiosError;
+
+      const result = transformAxiosError(axiosError);
+
+      expect(result).toBeInstanceOf(AuthenticationError);
+      expect((result as AuthenticationError).code).toBe('AUTH_FAILED');
     });
 
     it('should still default when the auth error carries no detail', () => {
