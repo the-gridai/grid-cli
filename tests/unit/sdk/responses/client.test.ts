@@ -94,9 +94,16 @@ describe('ResponsesClient', () => {
 
   describe('listModels', () => {
     it('should return array of models', async () => {
+      // `pricing` is required by the endpoint's schema and is null whenever the
+      // price cache has nothing for the id, so both branches are represented.
       const mockModels: Model[] = [
-        { id: 'fast-inference', object: 'model', display_name: 'Fast Inference' },
-        { id: 'prime-inference', object: 'model', display_name: 'Prime Inference' },
+        {
+          id: 'fast-inference',
+          object: 'model',
+          display_name: 'Fast Inference',
+          pricing: { usd_per_1m_tokens: 1.25, prompt: 1.25e-6, completion: 1.25e-6 },
+        },
+        { id: 'prime-inference', object: 'model', display_name: 'Prime Inference', pricing: null },
       ];
       mockAxiosInstance.get.mockResolvedValueOnce({
         data: { data: mockModels },
@@ -108,6 +115,94 @@ describe('ResponsesClient', () => {
       expect(mockAxiosInstance.get).toHaveBeenCalledWith('/models');
       expect(models).toHaveLength(2);
       expect(models[0].id).toBe('fast-inference');
+    });
+
+    // The point of widening `Model` is that a caller can reach the fields a
+    // harness actually needs. This asserts against a full catalog entry as
+    // `GET /v1/models` returns it, so the typed client is shown to carry the
+    // limits, capability flags and prices rather than dropping them.
+    it('should carry the full catalog entry through to typed callers', async () => {
+      const textPrime: Model = {
+        id: 'text-prime',
+        object: 'model',
+        name: 'The Grid: Text Prime',
+        display_name: 'Text Prime',
+        canonical_slug: 'the-grid-ai/text-prime',
+        owned_by: 'the-grid-ai',
+        created: 1772064000,
+        context_length: 196608,
+        top_provider: {
+          context_length: 196608,
+          max_input_tokens: 120000,
+          max_completion_tokens: 131072,
+          is_moderated: false,
+        },
+        architecture: {
+          modality: 'text->text',
+          input_modalities: ['text'],
+          output_modalities: ['text'],
+        },
+        supported_parameters: ['tools', 'response_format', 'max_tokens'],
+        max_input_tokens: 120000,
+        max_completion_tokens: 131072,
+        tool_call: true,
+        structured_output: true,
+        attachments: false,
+        release_date: '2026-02-26',
+        last_updated: '2026-07-15',
+        grid: { family: 'text', tier: 'prime', status: 'live' },
+        pricing: { usd_per_1m_tokens: 3.38, prompt: 3.38e-6, completion: 3.38e-6 },
+      };
+
+      mockAxiosInstance.get.mockResolvedValueOnce({ data: { data: [textPrime] } });
+
+      const client = ResponsesClient.getInstance();
+      const [model] = await client.listModels();
+
+      // The limits a harness sizes a request from.
+      expect(model.context_length).toBe(196608);
+      expect(model.top_provider?.max_input_tokens).toBe(120000);
+      expect(model.top_provider?.max_completion_tokens).toBe(131072);
+      expect(model.max_input_tokens).toBe(120000);
+
+      // The capability flags a registry renders.
+      expect(model.tool_call).toBe(true);
+      expect(model.structured_output).toBe(true);
+      expect(model.attachments).toBe(false);
+
+      // The prices a cost display reads.
+      expect(model.pricing?.usd_per_1m_tokens).toBe(3.38);
+      expect(model.pricing?.prompt).toBe(3.38e-6);
+
+      expect(model.owned_by).toBe('the-grid-ai');
+      expect(model.created).toBe(1772064000);
+      expect(model.release_date).toBe('2026-02-26');
+    });
+
+    // `top_provider` limits are pool floors across the models an instrument can
+    // route to, so the two maxima are independent ceilings and may sum past the
+    // window. Budgeting is `context_length - max_tokens`, never the sum.
+    it('exposes limits that may sum beyond the context window', async () => {
+      const model: Model = {
+        id: 'kimi-latest',
+        object: 'model',
+        pricing: null,
+        top_provider: {
+          context_length: 1048576,
+          max_input_tokens: 922000,
+          max_completion_tokens: 943718,
+          is_moderated: false,
+        },
+      };
+
+      mockAxiosInstance.get.mockResolvedValueOnce({ data: { data: [model] } });
+
+      const client = ResponsesClient.getInstance();
+      const [result] = await client.listModels();
+      const tp = result.top_provider!;
+
+      expect(tp.max_input_tokens + tp.max_completion_tokens).toBeGreaterThan(tp.context_length);
+      expect(tp.context_length - tp.max_completion_tokens).toBeGreaterThan(0);
     });
 
     it('should return empty array when no models', async () => {
