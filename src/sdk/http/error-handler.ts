@@ -52,12 +52,16 @@ export function transformAxiosError(error: AxiosError): Error {
   const errorData = data as any;
   const errorsBlock = errorData?.errors;
   const errorDetail = typeof errorsBlock?.detail === 'string' ? errorsBlock.detail : undefined;
+  const errorsCode = typeof errorsBlock?.code === 'string' ? errorsBlock.code : undefined;
   const errorMessage =
     errorData?.error?.message ||
     errorsBlock?.message ||
     errorData?.message ||
     'API request failed';
-  const errorCode = errorData?.error?.code || errorData?.code || errorDetail;
+  // `errors.code` was never read, so a machine code sent under it was dropped and
+  // `errors.detail` was promoted into its place — which is wrong wherever `detail`
+  // carries prose rather than a code (the consumption API's auth failures).
+  const errorCode = errorData?.error?.code || errorData?.code || errorsCode || errorDetail;
   const errorDetails = errorData?.error?.details || errorData?.details || errorsBlock;
   const requestId = (error.config as any)?.__requestId;
   const requestContext = {
@@ -90,8 +94,22 @@ export function transformAxiosError(error: AxiosError): Error {
 
   // Authentication errors (401, 403)
   if (status === 401 || status === 403) {
-    const message = errorMessage !== 'API request failed' ? errorMessage : 'Authentication failed';
-    return new AuthenticationError(message);
+    // The consumption API answers auth failures with
+    // `{"errors": {"code": …, "detail": …, "server_time": …}}`, where `detail`
+    // carries the human-readable reason and there is no `message` key at all.
+    // Without this the SDK reported a bare "Authentication failed" and dropped
+    // the only text explaining whether the key, the URL or the scope was wrong.
+    // Gated on `code` being present so that endpoints which put a machine code
+    // in `detail` (e.g. auto_mode_trading_restricted) are unaffected.
+    const message =
+      errorMessage !== 'API request failed'
+        ? errorMessage
+        : errorsCode && errorDetail
+          ? errorDetail
+          : 'Authentication failed';
+    // Preserve the server's machine code so callers can branch on it; falls
+    // back to the class default when the response carries none.
+    return new AuthenticationError(message, errorsCode || errorData?.error?.code || 'AUTH_FAILED');
   }
 
   // Rate limiting (429)
