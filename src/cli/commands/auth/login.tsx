@@ -6,7 +6,9 @@ import { AuthLoginView } from '../../ui/views';
 import { DeviceAuthLoginView } from '../../ui/views/DeviceAuthLoginView';
 import { GRID_CLI_CLIENT_ID, DEFAULT_SCOPES } from '../../../sdk/auth/oauth-client';
 
-const DEFAULT_EXCHANGE_URL = process.env.GRID_EXCHANGE_URL || 'https://trading.api.thegrid.ai';
+// OAuth/device flow and account settings live on the platform host (exchange-web),
+// not the trading host. `trading.api.*` returns 404 for `/api/v1/oauth/*`.
+const DEFAULT_EXCHANGE_URL = process.env.GRID_EXCHANGE_URL || 'https://platform.api.thegrid.ai';
 const DEFAULT_API_URL = process.env.API_URL || 'https://trading.api.thegrid.ai/v1';
 
 export const authLoginCommand = new Command('login')

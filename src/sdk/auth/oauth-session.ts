@@ -25,12 +25,43 @@ export function oauthSessionFromConfig(config: Config): OAuthSessionState | null
   return null;
 }
 
-/** Exchange OAuth host (device flow), without `/api/v1`. */
+/**
+ * Exchange OAuth host (device flow), without `/api/v1`.
+ *
+ * The account control plane (OAuth, keys, `/self/system-settings`) is served by
+ * `exchange-web` on the `platform.api.*` host, while orders are served by
+ * `trading-api` on `trading.api.*`. Deriving one from the other is therefore a
+ * host rewrite, not just stripping `/v1`.
+ */
 export function resolveExchangeBaseUrl(config: Config): string {
   if (config.OAUTH_BASE_URL) {
     return config.OAUTH_BASE_URL.replace(/\/$/, '');
   }
-  return config.API_URL.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+  return tradingUrlToPlatformBaseUrl(config.API_URL);
+}
+
+/**
+ * Maps a Trading API URL to its Exchange/platform counterpart:
+ * `trading.api.<suffix>` -> `platform.api.<suffix>`, and local `:4040` -> `:4020`.
+ * Unrecognised topologies are returned with only `/v1` stripped.
+ */
+export function tradingUrlToPlatformBaseUrl(tradingApiUrl: string): string {
+  const stripped = tradingApiUrl.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+
+  let url: URL;
+  try {
+    url = new URL(stripped);
+  } catch {
+    return stripped;
+  }
+
+  if (url.hostname.startsWith('trading.api.')) {
+    url.hostname = url.hostname.replace(/^trading\.api\./, 'platform.api.');
+  } else if (url.port === '4040') {
+    url.port = '4020';
+  }
+
+  return url.toString().replace(/\/$/, '');
 }
 
 /**

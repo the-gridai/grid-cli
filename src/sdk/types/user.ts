@@ -81,6 +81,16 @@ export interface SigningKey {
 }
 
 /**
+ * Signing key as returned by the list endpoint, which exposes only the first 8
+ * characters of the fingerprint. The full fingerprint is returned on create only.
+ */
+export interface SigningKeySummary {
+  id: string;
+  label: string;
+  fingerprint_prefix: string;
+}
+
+/**
  * Register signing key request
  */
 export interface RegisterSigningKeyRequest {

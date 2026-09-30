@@ -43,6 +43,12 @@ export interface PlaceOrderRequest {
   client_order_id?: string;
   post_only?: boolean;
   reduce_only?: boolean;
+  /**
+   * Advanced-mode opt-in to transfer a filled buy into the consumption account.
+   * Grid Exchange buy orders only; ignored for sells. Defaults to false, and is
+   * implied by easy mode and by auto-buy orders.
+   */
+  should_autotransfer?: boolean;
 }
 
 /**

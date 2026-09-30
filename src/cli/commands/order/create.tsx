@@ -13,9 +13,10 @@ interface OrderCreateAppProps {
   quantity: number;
   price: number;
   type: OrderType;
+  autoTransfer?: boolean;
 }
 
-function OrderCreateApp({ market, side, quantity, price, type }: OrderCreateAppProps): React.ReactElement {
+function OrderCreateApp({ market, side, quantity, price, type, autoTransfer }: OrderCreateAppProps): React.ReactElement {
   const [status, setStatus] = useState<ActionStatus>('pending');
   const [details, setDetails] = useState<{ label: string; value: string }[]>([]);
   const [error, setError] = useState<string | undefined>();
@@ -32,7 +33,8 @@ function OrderCreateApp({ market, side, quantity, price, type }: OrderCreateAppP
         type,
         quantity: quantity.toString(),
         price: price.toString(),
-        time_in_force: 'gtc' as const
+        time_in_force: 'gtc' as const,
+        ...(autoTransfer ? { should_autotransfer: true } : {})
       };
 
       try {
@@ -102,8 +104,12 @@ export const createOrderCommand = new Command('create')
   .requiredOption('--qty <quantity>', 'Quantity of credits')
   .requiredOption('--price <price>', 'Price per credit')
   .option('--type <type>', 'Order type (limit, market, stop)', 'limit')
+  .option(
+    '--auto-transfer',
+    'Transfer this buy into the consumption account when it fills (advanced mode; buy orders only)',
+  )
   .action(async (options) => {
-    const { market, side, qty, price, type } = options;
+    const { market, side, qty, price, type, autoTransfer } = options;
     
     // Validate inputs
     if (!['buy', 'sell'].includes(side)) {
@@ -118,6 +124,20 @@ export const createOrderCommand = new Command('create')
       process.exit(1);
     }
     
+    // The backend ignores should_autotransfer on sells, so reject it here rather
+    // than accepting a flag that silently does nothing.
+    if (autoTransfer && side === 'sell') {
+      const { waitUntilExit } = render(
+        <ActionFeedbackView
+          title="Validation Error"
+          status="error"
+          error="--auto-transfer applies to buy orders only"
+        />
+      );
+      await waitUntilExit();
+      process.exit(1);
+    }
+
     const quantity = parseFloat(qty);
     const priceNum = parseFloat(price);
     
@@ -152,6 +172,7 @@ export const createOrderCommand = new Command('create')
         quantity={quantity}
         price={priceNum}
         type={type as OrderType}
+        autoTransfer={autoTransfer}
       />
     );
     

@@ -13,7 +13,7 @@ import { getGlobalProfileOverride } from '../../core/config/profiles';
 import { ApiError } from '../../core/errors';
 import { logger } from '../../core/logging/logger';
 import type { ApiResponse } from '../types/api';
-import type { RegisterSigningKeyRequest, SigningKey } from '../types/user';
+import type { RegisterSigningKeyRequest, SigningKey, SigningKeySummary } from '../types/user';
 import {
   OAuthSession,
   oauthSessionFromConfig,
@@ -34,18 +34,61 @@ export interface ExchangeApiKey {
 
 export interface ExchangeSystemSettings {
   account_mode: string;
+  /** Derived from `account_mode`: true in easy mode, false in advanced. Not directly writable. */
   auto_transfer_enabled: boolean;
-  auto_top_up_enabled: boolean;
-  auto_top_up_quantity?: number | null;
-  auto_top_up_trigger_threshold?: number | null;
+  auto_buy_enabled: boolean;
+  auto_buy_quantity?: number | null;
+  auto_buy_trigger_threshold?: number | null;
   auto_reload_enabled: boolean;
   auto_reload_threshold_usd?: string | null;
   auto_reload_amount_usd?: string | null;
   auto_reload_monthly_limit_usd?: string | null;
+  /** Fields dictated by `account_mode`; writing a divergent value returns 403. */
+  mode_managed_fields?: string[];
+  /** @deprecated alias of `auto_buy_enabled`; kept while the backend still emits it. */
+  auto_top_up_enabled?: boolean;
+  /** @deprecated alias of `auto_buy_quantity`. */
+  auto_top_up_quantity?: number | null;
+  /** @deprecated alias of `auto_buy_trigger_threshold`. */
+  auto_top_up_trigger_threshold?: number | null;
 }
 
 export interface ExchangeClientOptions {
   profile?: string;
+}
+
+export interface ConsumptionStatsEntry {
+  date: string;
+  instrument_id: string;
+  api_key_id: string | null;
+  request_count: number;
+  tokens_allocated: number;
+  tokens_used: number;
+}
+
+export interface ConsumptionStatsSummary {
+  total_requests: number;
+  total_tokens_allocated: number;
+  total_tokens_used: number;
+}
+
+export interface ConsumptionStats {
+  resolution: string;
+  period_start: string;
+  period_end: string;
+  time_series: ConsumptionStatsEntry[];
+  summary: ConsumptionStatsSummary;
+}
+
+export interface ConsumptionStatsQuery {
+  /** Inclusive start date, `YYYY-MM-DD`. */
+  from: string;
+  /** Exclusive end date, `YYYY-MM-DD`. Use tomorrow to include today. */
+  to: string;
+  instrumentId?: string;
+  apiKeyId?: string;
+  page?: number;
+  pageSize?: number;
 }
 
 export class ExchangeClient {
@@ -143,8 +186,9 @@ export class ExchangeClient {
     await this.client.delete(`/api-keys/${id}`);
   }
 
-  public async listSigningKeys(): Promise<SigningKey[]> {
-    const response = await this.client.get<ApiResponse<SigningKey[]>>('/signing-keys');
+  /** Lists signing keys. The list endpoint returns `fingerprint_prefix`, not the full fingerprint. */
+  public async listSigningKeys(): Promise<SigningKeySummary[]> {
+    const response = await this.client.get<ApiResponse<SigningKeySummary[]>>('/signing-keys');
     return response.data?.data ?? [];
   }
 
@@ -183,13 +227,17 @@ export class ExchangeClient {
     return response.data.data;
   }
 
-  /** PATCH auto-transfer override (`auto_transfer_enabled` or `auto_transfer_override: null` for system default). */
-  public async patchAutoTransfer(
-    attrs: { auto_transfer_enabled?: boolean; auto_transfer_override?: boolean | null },
-  ): Promise<ExchangeSystemSettings> {
+  /**
+   * Sets auto-buy (previously "auto top-up"), which market-buys more units when
+   * the consumption balance falls below the trigger threshold.
+   *
+   * Idempotent, and mode-managed: easy mode dictates `true`, advanced mode follows
+   * the platform default, and a divergent value returns 403 `mode_managed_setting`.
+   */
+  public async patchAutoBuy(enabled: boolean): Promise<ExchangeSystemSettings> {
     const response = await this.client.patch<ApiResponse<ExchangeSystemSettings>>(
-      '/self/system-settings/auto-transfer',
-      attrs,
+      '/self/system-settings/auto-buy',
+      { auto_buy_enabled: enabled },
     );
     if (!response.data?.data) {
       throw new ApiError('Invalid response format', 500);
@@ -197,11 +245,44 @@ export class ExchangeClient {
     return response.data.data;
   }
 
-  public async toggleAutoTopUp(): Promise<void> {
-    await this.client.post('/self/system-settings/auto-top-up/toggle');
-  }
-
   public async switchAccountMode(mode: 'easy' | 'advanced'): Promise<void> {
     await this.client.post('/self/system-settings/account-mode', { mode });
+  }
+
+  /**
+   * Daily consumption statistics (requests and tokens), pre-aggregated every 15
+   * minutes so today's partial data is included.
+   *
+   * The backend requires both bounds as Flop filters on `date`: `>=` for the
+   * inclusive start and `<` for the exclusive end.
+   */
+  public async getConsumptionStats(query: ConsumptionStatsQuery): Promise<ConsumptionStats> {
+    const params = new URLSearchParams();
+    let i = 0;
+
+    const addFilter = (field: string, value: string, op?: string) => {
+      params.set(`filters[${i}][field]`, field);
+      if (op) params.set(`filters[${i}][op]`, op);
+      params.set(`filters[${i}][value]`, value);
+      i += 1;
+    };
+
+    addFilter('date', query.from, '>=');
+    addFilter('date', query.to, '<');
+    if (query.instrumentId) addFilter('instrument_id', query.instrumentId);
+    if (query.apiKeyId) addFilter('api_key_id', query.apiKeyId);
+
+    params.set('order_by[]', 'date');
+    params.set('order_directions[]', 'desc');
+    if (query.page !== undefined) params.set('page', String(query.page));
+    if (query.pageSize !== undefined) params.set('page_size', String(query.pageSize));
+
+    const response = await this.client.get<ApiResponse<ConsumptionStats>>(
+      `/consumption/stats?${params.toString()}`,
+    );
+    if (!response.data?.data) {
+      throw new ApiError('Invalid response format', 500);
+    }
+    return response.data.data;
   }
 }

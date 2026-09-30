@@ -158,6 +158,8 @@ See [`AGENTS.md`](AGENTS.md) for repo conventions and [`skills/`](skills/) for t
 
 | Doc | Contents |
 |-----|----------|
+| [**`docs/agent-quickstart.md`**](docs/agent-quickstart.md) | **AI agents:** install → OAuth → keys → inference → Cursor/Cline setup |
+| [`docs/cli-reference.md`](docs/cli-reference.md) | Every command group and its subcommands |
 | [`Docs/GETTING-STARTED-GUIDE.md`](Docs/GETTING-STARTED-GUIDE.md) | End-to-end onboarding |
 | [`Docs/API-REFERENCE-INDEX.md`](Docs/API-REFERENCE-INDEX.md) | REST API reference index |
 | [`grid/docs/`](grid/docs/) | Standalone SDK docs, authentication, migration |

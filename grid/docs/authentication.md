@@ -2,6 +2,8 @@
 
 For the full agent onboarding path (login → keys → inference → trade), see [`Docs/CLI-PROGRAMMATIC-ONBOARDING.md`](../Docs/CLI-PROGRAMMATIC-ONBOARDING.md).
 
+> **AI agents:** use the OAuth device flow rather than manual signing keys — see the [Agent Quickstart](../docs/agent-quickstart.md).
+
 Grid supports two authentication methods:
 
 1. **OAuth 2.0 Device Flow** (recommended) — browser-based login, like `gh auth login`
