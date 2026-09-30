@@ -9,6 +9,7 @@
  */
 
 import http from 'http';
+import v8 from 'v8';
 import { logger } from '../core/logging/logger';
 import { ControlApiAuth } from '../core/auth/control-api-auth';
 import type { ConfigManager, ConfigUpdateResult } from '../core/config/config-manager';
@@ -393,6 +394,42 @@ export class ControlServer {
       } else {
         this.sendJson(res, 200, { healthy: true });
       }
+      return;
+    }
+
+    // On-demand memory breakdown for leak diagnosis, reachable over the control
+    // API so no shell access to the host is needed. Poll a few times to compute
+    // a growth rate, or compare pools (heapUsed/old_space vs
+    // external/arrayBuffers vs handles).
+    if (path === '/debug/memory' && method === 'GET') {
+      const mb = (b: number) => Math.round((b / 1048576) * 10) / 10;
+      const m = process.memoryUsage();
+      const h = v8.getHeapStatistics() as v8.HeapInfo & {
+        number_of_native_contexts?: number;
+        number_of_detached_contexts?: number;
+      };
+      const spaces = v8.getHeapSpaceStatistics().map((s) => ({
+        space: s.space_name,
+        usedMB: mb(s.space_used_size),
+      }));
+      const proc = process as unknown as {
+        _getActiveHandles?: () => unknown[];
+        _getActiveRequests?: () => unknown[];
+      };
+      this.sendJson(res, 200, {
+        ts: new Date().toISOString(),
+        uptimeSec: Math.round(process.uptime()),
+        rssMB: mb(m.rss),
+        heapUsedMB: mb(m.heapUsed),
+        heapTotalMB: mb(m.heapTotal),
+        externalMB: mb(m.external),
+        arrayBuffersMB: mb(m.arrayBuffers),
+        detachedContexts: h.number_of_detached_contexts ?? -1,
+        nativeContexts: h.number_of_native_contexts ?? -1,
+        activeHandles: proc._getActiveHandles?.().length ?? -1,
+        activeRequests: proc._getActiveRequests?.().length ?? -1,
+        spaces,
+      });
       return;
     }
 

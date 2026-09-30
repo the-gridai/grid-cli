@@ -11,8 +11,22 @@ export const logger = winston.createLogger({
   ),
   defaultMeta: { service: 'grid-cli' },
   transports: [
-    new winston.transports.File({ filename: 'error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'combined.log' }),
+    // Size-capped + rotated so a long-running daemon can't grow these files
+    // without bound. In a deployed daemon stdout is what gets collected; these
+    // files are only a local post-mortem tail, so cap their on-disk usage.
+    new winston.transports.File({
+      filename: 'error.log',
+      level: 'error',
+      maxsize: 10 * 1024 * 1024, // 10MB per file
+      maxFiles: 5,
+      tailable: true,
+    }),
+    new winston.transports.File({
+      filename: 'combined.log',
+      maxsize: 10 * 1024 * 1024, // 10MB per file
+      maxFiles: 5,
+      tailable: true,
+    }),
   ],
 });
 
