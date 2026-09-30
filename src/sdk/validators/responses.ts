@@ -230,7 +230,10 @@ export const ConsumptionInstrumentSchema = z.object({
   last_withdrawal_at: z.string().nullable().optional(),
   last_commitment_at: z.string().nullable().optional(),
   last_transfer_at: z.string().nullable().optional(),
-  created_at: z.string(),
+  // Nullable: accounts created before this column was backfilled return null
+  // here, which made `grid consumption balance` fail validation outright even
+  // though nothing renders the field.
+  created_at: z.string().nullable(),
   updated_at: z.string()
 }).passthrough();
 

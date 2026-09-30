@@ -441,6 +441,13 @@ describe('ConsumptionInstrumentSchema', () => {
     expect(result).toEqual(instrument);
   });
 
+  it('accepts a null created_at, as returned for accounts predating the backfill', () => {
+    const instrument = { ...canonicalInstrument, created_at: null };
+
+    const result = ConsumptionInstrumentSchema.parse(instrument);
+    expect(result.created_at).toBeNull();
+  });
+
   it('rejects the stale available_balance field', () => {
     const instrument: Record<string, unknown> = {
       ...canonicalInstrument,
