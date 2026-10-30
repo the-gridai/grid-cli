@@ -128,19 +128,13 @@ export class StrategyInstance {
     const fingerprint = process.env[`${prefix}SIGNING_KEY_FINGERPRINT`] || process.env[`${prefix}API_KEY_FINGERPRINT`];
 
     if (!signingKey || !fingerprint) {
-      logger.warn(`[${this.name}] Missing credentials for prefix ${prefix}`);
-      console.log(`[${this.name}] ⚠️ Missing credentials for prefix ${prefix}`);
-      this.logCredentialInfo(prefix);
-      return undefined;
+      // A configured prefix is an identity boundary, not an optional override.
+      // Returning undefined selects the shared default account downstream.
+      throw new Error(`Missing credentials for configured prefix ${prefix}: signing key and fingerprint are required`);
     }
 
-    // Store credentials in env vars with the profile-specific prefix
-    // This allows getConfigForProfile to pick them up
-    process.env[`GRID_PROFILE_${profileName}_SIGNING_KEY`] = signingKey;
-    process.env[`GRID_PROFILE_${profileName}_SIGNING_KEY_FINGERPRINT`] = fingerprint;
-
-    // Also set as standard env vars for the profile system to find
-    // Each profile gets its own set of credentials stored with the strategy ID
+    // Keep the principal in its in-memory profile. Avoid copying private keys
+    // into additional environment variables inherited by child processes.
     const { registerDynamicProfile } = await import('../core/config/profiles');
     registerDynamicProfile(profileName, {
       signing_key: signingKey,

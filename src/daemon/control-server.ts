@@ -328,7 +328,7 @@ export class ControlServer {
       res.setHeader('Access-Control-Allow-Origin', requestOrigin);
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-thegrid-signature, x-thegrid-timestamp, x-thegrid-fingerprint');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-thegrid-signature, x-thegrid-timestamp, x-thegrid-fingerprint, x-thegrid-nonce');
 
     // Handle preflight
     if (method === 'OPTIONS') {
@@ -350,9 +350,11 @@ export class ControlServer {
       }
     }
 
-    // Authentication for mutating requests
+    // Honor private-read mode as well as authenticating every write.
+    const publicProbe = method === 'GET' && ['/health', '/ready'].includes(url.pathname);
+    const needsAuth = !publicProbe && (method !== 'GET' || !this.options.allowUnauthenticatedReads);
     let actor: string | undefined;
-    if (this.options.requireAuth && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    if (this.options.requireAuth && needsAuth) {
       const authResult = this.auth.authenticateRequest(req, body);
       if (!authResult.authenticated) {
         this.sendError(res, 401, authResult.error || 'Unauthorized');
@@ -1006,26 +1008,23 @@ export class ControlServer {
     const body = parsedBody as any;
     const signingKey = body?.signingKey;
     const fingerprint = body?.fingerprint;
-    const apiUrl = body?.apiUrl;
+    if (body?.apiUrl !== undefined) {
+      this.sendError(res, 400, 'apiUrl overrides are not allowed; use the configured Trading API');
+      return;
+    }
 
-    if (!signingKey || !fingerprint) {
+    if (typeof signingKey !== 'string' || !signingKey.trim() ||
+        typeof fingerprint !== 'string' || !fingerprint.trim()) {
       this.sendError(res, 400, 'signingKey and fingerprint are required');
       return;
     }
 
     try {
-      const { registerDynamicProfile } = await import('../core/config/profiles');
       const { ApiClient } = await import('../sdk/http/client');
 
-      const profileName = '__user_orders';
-      registerDynamicProfile(profileName, {
-        signing_key: signingKey,
-        signing_key_fingerprint: fingerprint,
-        api_url: apiUrl || process.env.API_URL,
+      const client = ApiClient.createInstance({
+        signingCredentials: { signingKey, fingerprint },
       });
-
-      ApiClient.resetProfileInstance(profileName);
-      const client = ApiClient.getInstanceForProfile(profileName);
       const orders = await client.listOrdersRaw({ status: 'active' });
       const sorted = (orders ?? []).sort((a: any, b: any) => {
         const tA = a.submitted_at || a.created_at || '';
@@ -1045,26 +1044,23 @@ export class ControlServer {
     const body = parsedBody as any;
     const signingKey = body?.signingKey;
     const fingerprint = body?.fingerprint;
-    const apiUrl = body?.apiUrl;
+    if (body?.apiUrl !== undefined) {
+      this.sendError(res, 400, 'apiUrl overrides are not allowed; use the configured Trading API');
+      return;
+    }
 
-    if (!signingKey || !fingerprint) {
+    if (typeof signingKey !== 'string' || !signingKey.trim() ||
+        typeof fingerprint !== 'string' || !fingerprint.trim()) {
       this.sendError(res, 400, 'signingKey and fingerprint are required');
       return;
     }
 
     try {
-      const { registerDynamicProfile } = await import('../core/config/profiles');
       const { ApiClient } = await import('../sdk/http/client');
 
-      const profileName = '__user_cancel';
-      registerDynamicProfile(profileName, {
-        signing_key: signingKey,
-        signing_key_fingerprint: fingerprint,
-        api_url: apiUrl || process.env.API_URL,
+      const client = ApiClient.createInstance({
+        signingCredentials: { signingKey, fingerprint },
       });
-
-      ApiClient.resetProfileInstance(profileName);
-      const client = ApiClient.getInstanceForProfile(profileName);
       const orders = await client.listOrdersRaw({ status: 'active' });
       if (!orders || orders.length === 0) {
         this.sendJson(res, 200, { success: true, cancelled: 0, failed: 0, remaining: 0, details: [] });
@@ -1145,10 +1141,14 @@ export class ControlServer {
     const body = parsedBody as any;
     const signingKey = body?.signingKey;
     const fingerprint = body?.fingerprint;
-    const apiUrl = body?.apiUrl;
+    if (body?.apiUrl !== undefined) {
+      this.sendError(res, 400, 'apiUrl overrides are not allowed; use the configured Trading API');
+      return;
+    }
     const order = body?.order;
 
-    if (!signingKey || !fingerprint) {
+    if (typeof signingKey !== 'string' || !signingKey.trim() ||
+        typeof fingerprint !== 'string' || !fingerprint.trim()) {
       this.sendError(res, 400, 'signingKey and fingerprint are required');
       return;
     }
@@ -1159,18 +1159,11 @@ export class ControlServer {
     }
 
     try {
-      const { registerDynamicProfile } = await import('../core/config/profiles');
       const { ApiClient } = await import('../sdk/http/client');
 
-      const profileName = '__user_place';
-      registerDynamicProfile(profileName, {
-        signing_key: signingKey,
-        signing_key_fingerprint: fingerprint,
-        api_url: apiUrl || process.env.API_URL,
+      const client = ApiClient.createInstance({
+        signingCredentials: { signingKey, fingerprint },
       });
-
-      ApiClient.resetProfileInstance(profileName);
-      const client = ApiClient.getInstanceForProfile(profileName);
       const result = await client.placeOrder(order);
 
       this.sendJson(res, 200, {

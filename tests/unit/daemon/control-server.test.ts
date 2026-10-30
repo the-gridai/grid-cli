@@ -450,3 +450,17 @@ describe('ControlServer', () => {
     });
   });
 });
+
+describe('ControlServer private reads', () => {
+  let server: ControlServer;
+  afterEach(async () => { await server.stop(); });
+
+  it('enforces allowUnauthenticatedReads=false on config and status, while allowing probes', async () => {
+    server = new ControlServer({ port: 0, host: '127.0.0.1', allowUnauthenticatedReads: false });
+    await server.start();
+    const port = server.getAddress()!.port;
+    expect((await makeRequest(port, 'GET', '/config')).status).toBe(401);
+    expect((await makeRequest(port, 'GET', '/status')).status).toBe(401);
+    expect((await makeRequest(port, 'GET', '/health')).status).toBe(200);
+  });
+});

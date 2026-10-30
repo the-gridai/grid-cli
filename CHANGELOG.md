@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Bind control signatures to a query-aware, domain-separated message and a single-use nonce. Custom control clients must upgrade with the daemon.
+- Enforce configured private reads and stop strategies with incomplete explicitly prefixed credentials.
+- Restrict user-order proxy requests to the configured API and isolate their signing credentials from shared profiles and ambient OAuth.
+
+
 ### Added
 
 - **`grid account limits --market-id <id>`** shows the effective order rate limit for your user on a market via the new Trading API `GET /v1/account/limits` endpoint. Also exposed as `ApiClient.getAccountLimits(marketId)` in the SDK.
