@@ -14,6 +14,11 @@ Include a description of the issue, steps to reproduce, and the potential impact
 - The CLI stores credentials in `~/.grid-cli/credentials.json` with your user's file permissions; treat that file like an SSH private key
 - `NODE_TLS_REJECT_UNAUTHORIZED=0` is for local development against self-signed certificates only
 
+## Control API and host kernels
+
+See [Control API security](docs/CONTROL_API_SECURITY.md) for request signing,
+private reads, strategy credentials, user-order proxy restrictions, and host-kernel updates.
+
 ## Supported Versions
 
 Only the latest released version (`v*` tag on `main`) receives security fixes.

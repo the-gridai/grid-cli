@@ -142,6 +142,8 @@ export interface ApiClientOptions {
   apiUrl?: string;
   /** Override WebSocket URL */
   wsUrl?: string;
+  /** Explicit request-owned identity; never cached or inherited from ambient OAuth. */
+  signingCredentials?: { signingKey: string; fingerprint: string };
 }
 
 export class ApiClient {
@@ -177,6 +179,8 @@ export class ApiClient {
     // Create Axios instance with custom agents for high concurrency
     this.client = axios.create({
       baseURL: config.API_URL,
+      // A request-owned signing identity must not be forwarded to redirects.
+      maxRedirects: options?.signingCredentials ? 0 : undefined,
       timeout: config.SDK_REQUEST_TIMEOUT || 30000,
       headers: {
         'Content-Type': 'application/json',
@@ -420,6 +424,17 @@ export class ApiClient {
   }
 
   private initAuth(config: Config, options?: ApiClientOptions): void {
+    if (options?.signingCredentials) {
+      const { signingKey, fingerprint } = options.signingCredentials;
+      if (typeof signingKey !== 'string' || !signingKey.trim() ||
+          typeof fingerprint !== 'string' || !fingerprint.trim()) {
+        throw new Error('Explicit signing credentials require a key and fingerprint');
+      }
+      // Fail closed on malformed explicit credentials, before ambient OAuth or
+      // default keys can be selected. This client belongs to one request.
+      this.auth = new SignatureAuth({ signingKey, fingerprint });
+      return;
+    }
     if (config.AUTH_TYPE === 'oauth' && config.ACCESS_TOKEN && config.REFRESH_TOKEN) {
       this.oauthConfig = {
         accessToken: config.ACCESS_TOKEN,

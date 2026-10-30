@@ -2,7 +2,7 @@
  * Control API Authentication
  * 
  * Provides Ed25519 signature verification for the control API.
- * Reuses the same signature format as the trading API for consistency.
+ * Uses a domain-separated signature so trading signatures cannot authorize control actions.
  * 
  * @module control-api-auth
  */
@@ -22,6 +22,7 @@ export interface SignedRequestHeaders {
   'x-thegrid-signature': string;
   'x-thegrid-timestamp': string;
   'x-thegrid-fingerprint': string;
+  'x-thegrid-nonce': string;
 }
 
 /**
@@ -49,13 +50,15 @@ export interface AuthResult {
  * Control API Authentication class
  * 
  * Verifies Ed25519 signatures on incoming control API requests.
- * Uses the same signature format as the Grid trading API.
+ * Binds each request to its full target and a single-use random nonce.
  */
 export class ControlApiAuth {
   private publicKey: Uint8Array | null = null;
   private expectedFingerprint: string | null = null;
   private maxTimestampAge: number;
   private allowUnauthenticatedReads: boolean;
+  private usedNonces = new Map<string, number>();
+  private static readonly MAX_NONCES = 10000;
 
   constructor(options: ControlApiAuthOptions = {}) {
     this.maxTimestampAge = options.maxTimestampAge ?? 60;
@@ -144,11 +147,14 @@ export class ControlApiAuth {
     }
 
     // Extract auth headers
-    const signature = req.headers['x-thegrid-signature'] as string;
-    const timestamp = req.headers['x-thegrid-timestamp'] as string;
-    const fingerprint = req.headers['x-thegrid-fingerprint'] as string;
+    const signature = req.headers['x-thegrid-signature'];
+    const timestamp = req.headers['x-thegrid-timestamp'];
+    const fingerprint = req.headers['x-thegrid-fingerprint'];
+    const nonce = req.headers['x-thegrid-nonce'];
 
-    if (!signature || !timestamp || !fingerprint) {
+    if (typeof signature !== 'string' || typeof timestamp !== 'string' ||
+        typeof fingerprint !== 'string' || typeof nonce !== 'string' ||
+        !signature || !fingerprint || !/^[a-f0-9]{32}$/.test(nonce)) {
       return {
         authenticated: false,
         error: 'Missing authentication headers'
@@ -169,7 +175,7 @@ export class ControlApiAuth {
     }
 
     // Check timestamp is not too old
-    const requestTime = parseInt(timestamp, 10);
+    const requestTime = /^\d{1,12}$/.test(timestamp) ? Number(timestamp) : NaN;
     const now = Math.floor(Date.now() / 1000);
 
     if (isNaN(requestTime) || Math.abs(now - requestTime) > this.maxTimestampAge) {
@@ -179,11 +185,8 @@ export class ControlApiAuth {
       };
     }
 
-    // Construct message to verify
-    // Format: timestamp + method + path + body
-    const url = new URL(req.url || '/', `http://localhost`);
-    const pathForSign = url.pathname;
-    const message = `${timestamp}${method}${pathForSign}${body}`;
+    // Include the query string: it can select the strategy affected by an action.
+    const message = controlMessage(timestamp, nonce, method, req.url || '/', body);
 
     // Verify signature
     try {
@@ -202,6 +205,19 @@ export class ControlApiAuth {
           error: 'Invalid signature'
         };
       }
+
+      // Only valid signatures consume capacity. Retain future-dated requests
+      // until the end of their acceptance window, and fail closed at capacity.
+      for (const [seen, expiresAt] of this.usedNonces) {
+        if (expiresAt < now) this.usedNonces.delete(seen);
+      }
+      if (this.usedNonces.has(nonce)) {
+        return { authenticated: false, error: 'Request already used' };
+      }
+      if (this.usedNonces.size >= ControlApiAuth.MAX_NONCES) {
+        return { authenticated: false, error: 'Authentication capacity exceeded' };
+      }
+      this.usedNonces.set(nonce, requestTime + this.maxTimestampAge);
 
       return {
         authenticated: true,
@@ -272,6 +288,12 @@ export class ControlApiAuth {
   }
 }
 
+/** Canonical control protocol; deliberately incompatible with trading signatures. */
+function controlMessage(timestamp: string, nonce: string, method: string, target: string, body: string): string {
+  const url = new URL(target, 'http://localhost');
+  return JSON.stringify(['grid-control-v1', timestamp, nonce, method, url.pathname + url.search, body]);
+}
+
 /**
  * Create authentication headers for making control API requests
  * 
@@ -313,7 +335,8 @@ export function createSignedHeaders(
 
   // Create signature
   const timestamp = Math.floor(Date.now() / 1000).toString();
-  const message = `${timestamp}${method.toUpperCase()}${path}${body}`;
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const message = controlMessage(timestamp, nonce, method.toUpperCase(), path, body);
   const messageBytes = util.decodeUTF8(message);
   const signatureBytes = nacl.sign.detached(messageBytes, privateKey);
   const signature = util.encodeBase64(signatureBytes);
@@ -322,6 +345,7 @@ export function createSignedHeaders(
     'x-thegrid-signature': signature,
     'x-thegrid-timestamp': timestamp,
     'x-thegrid-fingerprint': fingerprint,
+    'x-thegrid-nonce': nonce,
   };
 }
 
