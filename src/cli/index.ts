@@ -1,15 +1,14 @@
-#!/usr/bin/env node
 /**
- * GRID CLI Entry Point
+ * GRID CLI library entry.
  *
- * OpenTelemetry instrumentation is handled by `src/instrumentation.ts`,
- * loaded via the Node.js `--import` flag in the bin/grid shim. By the time
- * this file runs, HTTP auto-instrumentation is already active and every
- * outgoing request automatically gets W3C traceparent propagation.
+ * Exports the command tree rather than running it, so an embedding overlay can
+ * import `buildProgram`/`run` and add its own commands. The process entry point
+ * is `./main`, which is what bin/grid invokes.
  *
  * This file uses ONLY `@opentelemetry/api` — no SDK imports.
  */
 import { Command } from 'commander';
+import { registerExtraCommands } from './extra-commands';
 import { statusCommand } from './commands/system/status';
 import { startCommand } from './commands/system/start';
 import { orderCommand } from './commands/order';
@@ -24,7 +23,6 @@ import { tuiCommand, launchTUI } from './commands/tui';
 import { hotwireCommandGroup } from './commands/hotwire';
 import { consumptionCommandGroup } from './commands/consumption';
 import { tradingCommandGroup } from './commands/trading';
-import { uiCommand } from './commands/ui';
 import { configCommand } from './commands/config';
 import { verifyCommand } from './commands/verify';
 import { diagnosticsCommand } from './commands/diagnostics';
@@ -37,7 +35,14 @@ import chalk from 'chalk';
 
 let showTiming = false;
 
-const main = async () => {
+/**
+ * Build the root `grid` command with all built-in commands registered.
+ *
+ * Consumers that embed this package (e.g. the private grid-cli overlay) can
+ * pass additional commands via `extraCommands` to register on top of the
+ * shared set without forking this file.
+ */
+export function buildProgram(extraCommands: Command[] = []): Command {
   const program = new Command();
 
   program
@@ -80,15 +85,26 @@ const main = async () => {
   program.addCommand(hotwireCommandGroup);
   program.addCommand(consumptionCommandGroup);
   program.addCommand(tradingCommandGroup);
-  program.addCommand(uiCommand);
   program.addCommand(configCommand);
   program.addCommand(verifyCommand);
   program.addCommand(diagnosticsCommand);
+
+  registerExtraCommands(program, extraCommands);
 
   program.on('command:*', () => {
     console.error('Invalid command: %s\nSee --help for a list of available commands.', program.args.join(' '));
     process.exit(1);
   });
+
+  return program;
+}
+
+/**
+ * Run the CLI: build the program, apply global flags, launch the TUI when
+ * invoked with no subcommand, and otherwise parse and dispatch.
+ */
+export async function run(extraCommands: Command[] = []): Promise<void> {
+  const program = buildProgram(extraCommands);
 
   const args = process.argv.slice(2);
 
@@ -115,10 +131,4 @@ const main = async () => {
   }
 
   await program.parseAsync(process.argv);
-};
-
-main().catch(async (err) => {
-  logger.error('Fatal Error:', { error: err });
-  console.error(chalk.red('Fatal Error:'), err);
-  process.exit(1);
-});
+}
